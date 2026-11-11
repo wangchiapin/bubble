@@ -155,6 +155,68 @@ with sync_playwright() as pw:
     t.evaluate("document.querySelector('#muteChk').click()")
     # 刪字詞
     n = t.evaluate('window.__bb.D.words.length'); t.click('[data-a=delword]'); check('刪除單一字詞', t.evaluate('window.__bb.D.words.length') == n - 1)
+    # ===== 進場方式、浮動設定面板 =====
+    if t.is_visible('.ov'): t.click('[data-a=closeov]')
+    if t.evaluate("window.__bb.D.rd.st") == 'run': t.click('[data-a=endround]'); t.click('[data-a=closeov]')
+    apply_words(t, '一 二 三 四 五 六')
+    t.select_option('#capSel', '0')
+    y0 = t.evaluate("document.querySelector('#field').getBoundingClientRect().top")
+    check('設定面板浮動不推擠泡泡區', t.is_visible('#panel') and t.evaluate("document.querySelector('#field').getBoundingClientRect().top") == y0 and t.evaluate("getComputedStyle(document.querySelector('#panel')).position") == 'absolute')
+    t.click('[data-a=en][data-v=batch]')
+    t.select_option('#enN', '1'); t.fill('#enGap', '2'); t.dispatch_event('#enGap', 'change')
+    check('分批進來：選項出現', t.is_visible('#enOpts') and t.evaluate('window.__bb.D.set.en.m') == 'batch')
+    t.click('[data-a=start]'); t.wait_for_timeout(400)
+    check('分批：一開始只進 1 個', t.locator('.bub').count() == 1, t.locator('.bub').count())
+    # 設定面板開著也能戳泡泡
+    pop_by_id(t, t.evaluate("document.querySelector('.bub').dataset.id")); t.wait_for_timeout(300)
+    check('開著設定也能戳泡泡', t.evaluate('window.__bb.D.rd.popped.length') == 1)
+    t.wait_for_timeout(2200)
+    check('分批：隔幾秒再進一個', t.locator('.bub').count() == 1, t.locator('.bub').count())
+    t.wait_for_timeout(2200)
+    check('分批：持續進來', t.locator('.bub').count() == 2, t.locator('.bub').count())
+    # 上課中改成全部一次
+    t.click('[data-a=en][data-v=all]'); t.wait_for_timeout(500)
+    check('上課中改「全部一次」剩下的立刻進來', t.locator('.bub').count() == 5, t.locator('.bub').count())
+    t.click('[data-a=endround]'); t.click('[data-a=closeov]')
+    # 每次進 3 個
+    t.click('[data-a=en][data-v=batch]'); t.select_option('#enN', '3'); t.fill('#enGap', '30'); t.dispatch_event('#enGap', 'change')
+    t.click('[data-a=start]'); t.wait_for_timeout(400)
+    check('分批：每次進 3 個', t.locator('.bub').count() == 3, t.locator('.bub').count())
+    t.click('[data-a=endround]'); t.click('[data-a=closeov]')
+    # 逐漸加快
+    t.select_option('#enN', '1'); t.fill('#enGap', '10'); t.dispatch_event('#enGap', 'change')
+    t.evaluate("document.querySelector('#enRamp').click()")
+    check('逐漸加快：出現最短間隔欄位', t.is_visible('#enMin'))
+    t.fill('#enMin', '3'); t.dispatch_event('#enMin', 'change')
+    t.click('[data-a=start]'); t.wait_for_timeout(300)
+    bs = t.evaluate("window.__bb.D.rd.order.map(id=>window.__bb.D.words.find(w=>w.id==id).m.born)")
+    gaps = [round(bs[i+1]-bs[i], 3) for i in range(len(bs)-1)]
+    check('逐漸加快：間隔越來越短、不低於最短', all(gaps[i] >= gaps[i+1] for i in range(len(gaps)-1)) and gaps[0] > gaps[-1] and min(gaps) >= 3*0.85 - 0.01, gaps)
+    t.click('[data-a=endround]'); t.click('[data-a=closeov]')
+    t.evaluate("document.querySelector('#enRamp').click()")
+    t.click('[data-a=start]'); t.wait_for_timeout(300)
+    bs = t.evaluate("window.__bb.D.rd.order.map(id=>window.__bb.D.words.find(w=>w.id==id).m.born)")
+    gaps = [round(bs[i+1]-bs[i], 3) for i in range(len(bs)-1)]
+    check('取消逐漸加快：間隔固定', len(set(gaps)) == 1, gaps)
+    t.click('[data-a=endround]'); t.click('[data-a=closeov]')
+    # 同時出現 1、2：排隊的從邊緣進來
+    t.click('[data-a=en][data-v=all]'); t.select_option('#capSel', '1')
+    t.click('[data-a=start]'); t.wait_for_timeout(400)
+    check('同時出現 1 個', t.locator('.bub').count() == 1)
+    pop_by_id(t, t.evaluate("document.querySelector('.bub').dataset.id")); t.wait_for_timeout(700)
+    check('戳破後下一個才進來', t.locator('.bub').count() == 1 and t.evaluate('window.__bb.D.rd.popped.length') == 1)
+    t.select_option('#capSel', '2'); t.wait_for_timeout(300)
+    check('同時出現 2 個', t.locator('.bub').count() == 2)
+    t.select_option('#capSel', '0'); t.click('[data-a=endround]'); t.click('[data-a=closeov]')
+    # 配對 + 分批：目標一定是已經進來的字
+    t.click('[data-a=mode][data-v=match]')
+    apply_words(t, '你好=hola 謝謝=gracias 老師=profesor 學生=alumno')
+    t.click('[data-a=en][data-v=batch]'); t.select_option('#enN', '1'); t.fill('#enGap', '30'); t.dispatch_event('#enGap', 'change')
+    t.click('[data-a=start]'); t.wait_for_timeout(600)
+    tg = t.evaluate('window.__bb.D.rd.target')
+    check('配對分批：目標是已出現的泡泡', tg is not None and t.locator(f'.bub[data-id="{tg}"]').count() == 1, tg)
+    t.click('[data-a=endround]'); t.click('[data-a=closeov]')
+    t.click('[data-a=mode][data-v=say]'); t.click('[data-a=en][data-v=all]')
     check('整體無 JS 錯誤(老師)', not errs, errs)
 
     # ===== 連線：老師 + 學生 =====

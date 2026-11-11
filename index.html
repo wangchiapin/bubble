@@ -71,6 +71,10 @@ input[type=text],input[type=number],select{border:1.5px solid var(--line);border
 @keyframes blink{50%{opacity:.35}}
 /* 泡泡場 */
 #target{min-height:0}
+.wrap.teacher{position:relative}
+#panel{position:absolute;right:12px;width:min(420px,calc(100% - 24px));max-height:72vh;overflow:auto;z-index:15;box-shadow:0 8px 24px rgba(31,29,26,.25);margin:0}
+.phead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.phead b{font-size:15px;letter-spacing:.05em}
 .target{display:flex;align-items:baseline;gap:10px;justify-content:center;border:1.5px solid var(--line);border-radius:8px;background:var(--panel);padding:6px 12px;margin-bottom:8px}
 .target .big{font-size:30px;font-weight:700}
 .target small{font-size:15px;color:var(--mute)}
@@ -128,7 +132,7 @@ const cyrb53 = (str, seed = 0) => {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return 4294967296 * (2097151 & h2) + (h1 >>> 0);
 };
-const DEF = { script: 'tc', ann: 'py', speed: 3, size: 5, cap: 0, mode: 'say', timerSel: 'off', timerCustom: 90, autoTimer: true, mute: false, lists: [], cur: '', text: '', ok: false };
+const DEF = { script: 'tc', ann: 'py', speed: 3, size: 5, cap: 0, mode: 'say', timerSel: 'off', timerCustom: 90, autoTimer: true, enMode: 'all', enN: 1, enGap: 5, enRamp: false, enMin: 2, mute: false, lists: [], cur: '', text: '', ok: false };
 function loadS() { try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) { return Object.assign({}, DEF); } }
 let S = loadS();
 function saveS() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) {} }
@@ -163,6 +167,7 @@ const T = {
   waitT: ['等老師開始', '等老师开始'], pressStart: ['按「開始本輪」', '按「开始本轮」'], findThis: ['找出', '找出'],
   needWords: ['請先輸入字詞', '请先输入字词'], needPair: ['配對模式要用等號輸入，例如 你好=hola', '配对模式要用等号输入，例如 你好=hola'],
   sound: ['音效', '音效'], tapSound: ['點一下畫面開啟聲音', '点一下画面开启声音'], pyFix: ['拼音微調', '拼音微调'], del: ['刪除', '删除'],
+  entry: ['進場方式', '进场方式'], enAll: ['全部一次', '全部一次'], enBatch: ['分批進來', '分批进来'], enN: ['每次', '每次'], enNUnit: ['個', '个'], enGap: ['每隔', '每隔'], enRamp: ['逐漸加快', '逐渐加快'], enMin: ['最短', '最短'], pclose: ['收合', '收合'],
   applied: ['已套用', '已套用'], added: ['已加入', '已加入'], modeStudent1: ['請唸出泡泡裡的字詞', '请念出泡泡里的字词'],
 };
 let uiSC = () => S.script === 'sc';
@@ -285,11 +290,12 @@ const undone = new Set();        // 老師復原過的
 let dismissedN = -1;
 let panelOpen = false;
 
+const enCfg = () => ({ m: S.enMode, n: +S.enN || 1, gap: +S.enGap || 5, ramp: !!S.enRamp, min: +S.enMin || 2 });
 const idleRd = (n) => ({ n: n || 0, st: 'idle', order: [], popped: [], miss: [], target: null, rv: [] });
 function newDoc() {
   return {
     v: 1, ts: 0, nid: 0,
-    set: { script: S.script, ann: S.ann, mode: S.mode, cap: S.cap, size: S.size },
+    set: { script: S.script, ann: S.ann, mode: S.mode, cap: S.cap, size: S.size, en: enCfg() },
     words: [],
     mt: { base: 0, at: Date.now(), sp: S.speed, run: true },
     rd: idleRd(0),
@@ -378,10 +384,36 @@ const poppedIds = () => idsOf(D.rd.popped, D.rd.n);
 const missIds = () => idsOf(D.rd.miss, D.rd.n);
 const wmap = () => new Map(D.words.map((w) => [w.id, w]));
 function remainingIds() { const ps = new Set(poppedIds()); return D.rd.order.filter((id) => !ps.has(id)); }
+function releasedRemaining() {
+  const T = effT(), W = wmap();
+  return remainingIds().filter((id) => { const x = W.get(id); return x && x.m && x.m.born <= T + 0.0005; });
+}
 function visibleIds() {
   if (D.rd.st === 'idle') return [];
-  const r = remainingIds(); const cap = D.set.cap || 0;
+  const r = releasedRemaining(); const cap = D.set.cap || 0;
   return cap ? r.slice(0, cap) : r;
+}
+/* 進場時間表：每個字詞的 born ＝ 它飛進來的時間（用泡泡的時間單位，所以暫停移動時也會暫停進場） */
+function schedule(ids, start) {
+  const e = D.set.en || { m: 'all' }, W = wmap();
+  const f = fac(D.mt.sp), n = Math.max(1, e.n | 0);
+  let cum = 0, b = 0;
+  ids.forEach((id, i) => {
+    if (e.m === 'batch' && i > 0 && i % n === 0) {
+      const g = e.ramp ? Math.max(Math.min(e.min, e.gap), e.gap * Math.pow(0.85, b)) : e.gap;
+      cum += Math.max(0.3, g); b++;
+    }
+    const w = W.get(id); if (w) w.m.born = r3(start + cum * f);
+  });
+}
+function reschedule() {
+  if (!D || D.rd.st !== 'run') return;
+  const T = effT(), W = wmap(), ps = new Set(poppedIds());
+  const pend = D.rd.order.filter((id) => { const x = W.get(id); return !ps.has(id) && x && x.m.born > T + 0.001; });
+  if (!pend.length) return;
+  const e = D.set.en;
+  schedule(pend, T + (e.m === 'batch' ? e.gap * fac(D.mt.sp) : 0));
+  push(['words']);
 }
 
 /* ================= 聲音（用程式合成，不用音檔） ================= */
@@ -443,14 +475,15 @@ function startRound(ids) {
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   D.rd = { n: D.rd.n + 1, st: 'run', order: pool.map((w) => w.id), popped: [], miss: [], target: null, rv: [] };
   D.mt = { base: t0, at: now(), sp: D.mt.sp, run: true };
+  schedule(D.rd.order, t0);
   localPop.clear(); undone.clear(); dismissedN = -1;
   if (S.autoTimer && D.tm.k) tmStart(true);
   if (mode === 'match') pickTarget(true);
   push(['words', 'rd', 'mt', 'tm']); renderAll();
 }
 function pickTarget(quiet) {
-  const rem = remainingIds();
-  if (!rem.length) { D.rd.target = null; return; }
+  const rem = releasedRemaining();
+  if (!rem.length) return;
   let cand = rem.filter((id) => id !== D.rd.target); if (!cand.length) cand = rem;
   D.rd.target = cand[Math.floor(Math.random() * cand.length)];
   if (!quiet) { push(['rd.target']); renderTarget(); }
@@ -494,6 +527,9 @@ function undoPop() {
   else if (room) Sync.remove(room.code, 'rd.popped', last).catch(() => {});
   if (D.set.mode === 'match' && D.rd.target === ids[ids.length - 1]) { /* 目標回來了 */ }
   renderAll();
+}
+function applyEn() {
+  saveS(); D.set.en = enCfg(); push(['set']); reschedule(); renderPanelDyn(); updateCtl();
 }
 function setMode(m) {
   D.set.mode = m; S.mode = m; saveS();
@@ -650,25 +686,31 @@ function updateCtl() {
   if (document.activeElement !== sp) sp.value = D.mt.sp; if (document.activeElement !== sz) sz.value = D.set.size;
   $('#vSpeed').textContent = D.mt.sp; $('#vSize').textContent = D.set.size;
   $('#quickIn').placeholder = t('quickPh');
-  $$('[data-on]').forEach((el) => { const [k, v] = el.dataset.on.split(':'); const cur = { ann: D.set.ann, script: D.set.script, tsel: S.timerSel }[k]; el.classList.toggle('on', String(cur) === v); });
+  $$('[data-on]').forEach((el) => { const [k, v] = el.dataset.on.split(':'); const cur = { ann: D.set.ann, script: D.set.script, tsel: S.timerSel, en: S.enMode }[k]; el.classList.toggle('on', String(cur) === v); });
 }
 
 /* ================= 設定面板 ================= */
 function buildPanel() {
   const el = $('#panel');
   el.innerHTML =
+    '<div class="phead"><b>' + t('settings') + '</b><button class="btn small" data-a="panel">' + t('pclose') + ' ✕</button></div>' +
     '<div class="g"><h2>' + t('lists') + '</h2><div class="row"><select id="listSel"></select><input type="text" id="listName" placeholder="' + esc(t('listName')) + '" style="flex:1;min-width:120px"><button class="btn small" data-a="listsave">' + t('saveList') + '</button><button class="btn small danger" data-a="listdel">' + t('delList') + '</button></div></div>' +
     '<div class="g"><h2>' + t('words') + '</h2><textarea id="wordsIn" placeholder="' + esc(t('wordsPh')) + '"></textarea><div class="row" style="margin-top:6px"><button class="btn primary" data-a="apply">' + t('apply') + '</button><span class="note">' + t('help') + '</span></div></div>' +
     '<div class="g row"><span><b>' + t('ann') + '</b> ' + tabBtns('ann', [['py', t('py')], ['zy', t('zy')], ['none', t('none')]]) + '</span>' +
       '<span><b>' + t('script') + '</b> ' + tabBtns('script', [['tc', t('tc')], ['sc', t('sc')]]) + '</span>' +
       '<label><b>' + t('cap') + '</b> <select id="capSel"></select></label>' +
       '<label><input type="checkbox" id="muteChk"> ' + t('sound') + '</label></div>' +
+    '<div class="g row"><b>' + t('entry') + '</b> ' + tabBtns('en', [['all', t('enAll')], ['batch', t('enBatch')]]) +
+      '<span id="enOpts" class="row">' + t('enN') + ' <select id="enN"></select> ' + t('enNUnit') + ' · ' + t('enGap') + ' <input type="number" id="enGap" min="1" max="60" style="width:62px"> ' + t('secs') +
+      ' <label><input type="checkbox" id="enRamp"> ' + t('enRamp') + '</label><span id="enMinW">' + t('enMin') + ' <input type="number" id="enMin" min="1" max="60" style="width:62px"> ' + t('secs') + '</span></span></div>' +
     '<div class="g"><h2>' + t('timer') + '</h2><div class="row">' + tabBtns('tsel', [['off', t('tOff')], ['d30', t('t30')], ['d60', t('t60')], ['d180', t('t180')], ['d300', t('t300')], ['custom', t('tCustom')], ['u', t('tUp')]]) +
       '<span id="custWrap"><input type="number" id="custSec" min="1" max="7200" style="width:80px"> ' + t('secs') + '</span>' +
       '<label><input type="checkbox" id="autoT"> ' + t('tAuto') + '</label></div></div>' +
     '<div class="g"><h2>' + t('pyFix') + '</h2><div id="pyTab"></div></div>';
   $('#wordsIn').value = S.text || '';
-  $('#capSel').innerHTML = [0, 3, 5, 8, 10, 15, 20].map((n) => '<option value="' + n + '">' + (n ? n : t('capAll')) + '</option>').join('');
+  $('#capSel').innerHTML = [0, 1, 2, 3, 5, 8, 10, 15, 20].map((n) => '<option value="' + n + '">' + (n ? n : t('capAll')) + '</option>').join('');
+  $('#enN').innerHTML = [1, 2, 3, 4, 5, 6, 8, 10].map((n) => '<option value="' + n + '">' + n + '</option>').join('');
+  $('#enN').value = S.enN; $('#enGap').value = S.enGap; $('#enMin').value = S.enMin; $('#enRamp').checked = !!S.enRamp;
   $('#capSel').value = D.set.cap; $('#muteChk').checked = !S.mute; $('#autoT').checked = !!S.autoTimer; $('#custSec').value = S.timerCustom;
   fillListSel();
 }
@@ -681,6 +723,8 @@ function fillListSel() {
 function renderPanelDyn() {
   if (role !== 'teacher') return;
   $('#panel').classList.toggle('hide', !panelOpen);
+  { const c = $('#ctl'), pn = $('#panel'); if (c && pn) pn.style.top = (c.offsetTop + c.offsetHeight + 6) + 'px'; }
+  { const o = $('#enOpts'); if (o) { o.style.display = S.enMode === 'batch' ? '' : 'none'; const mw = $('#enMinW'); if (mw) mw.style.display = S.enRamp ? '' : 'none'; } }
   const cw = $('#custWrap'); if (cw) cw.style.display = S.timerSel === 'custom' ? '' : 'none';
   const tab = $('#pyTab'); if (!tab) return;
   if (!D.words.length) { tab.innerHTML = '<span class="note">—</span>'; return; }
@@ -727,6 +771,7 @@ function renderOverlay() {
 
 /* ================= 泡泡畫面（每一格都由時間算出位置） ================= */
 const els = new Map();
+const lb = new Map(); let lbN = -1;
 let FW = 0, FH = 0, ro = null;
 function fieldReset() {
   els.clear(); FW = FH = 0;
@@ -772,14 +817,17 @@ function frame() {
   else if (msg) msg.remove();
   if (!vis.length) return;
   const T0 = effT(), Dp = bubbleDiam();
+  if (lbN !== D.rd.n) { lb.clear(); lbN = D.rd.n; }
   for (const id of vis) {
     if (pset.has(id)) continue;
     const w = W.get(id); if (!w || !w.m) continue;
     let el = els.get(id);
-    if (!el) { el = document.createElement('div'); el.className = 'bub b' + (w.m.c % 4) + ' enter'; el.dataset.id = id; el.innerHTML = '<div class="bi"></div>'; f.appendChild(el); els.set(id, el); setTimeout(() => el.classList.remove('enter'), 400); }
+    let isNew = false;
+    if (!el) { isNew = true; el = document.createElement('div'); el.className = 'bub b' + (w.m.c % 4) + ' enter'; el.dataset.id = id; el.innerHTML = '<div class="bi"></div>'; f.appendChild(el); els.set(id, el); setTimeout(() => el.classList.remove('enter'), 400); }
     const sig = [D.set.mode, D.set.script, D.set.ann, Dp, w.tc, w.py, w.zy, (w.tr || []).join('|')].join('~');
     if (el._sig !== sig) { el._sig = sig; el.style.width = el.style.height = Dp + 'px'; el.firstChild.innerHTML = bubbleInner(w, Dp); }
-    const u = Math.max(0, T0 - w.m.born);
+    if (isNew && D.set.cap > 0 && D.rd.order.indexOf(id) >= D.set.cap && T0 - w.m.born > 0.5) lb.set(id, T0);   // 排隊後才上場的，從邊緣飛進來
+    const u = Math.max(0, T0 - (lb.has(id) ? lb.get(id) : w.m.born));
     const px = posAt(w.m.x0, w.m.vx, u), py = posAt(w.m.y0, w.m.vy, u);
     el.style.transform = 'translate3d(' + (px * (FW - Dp)).toFixed(1) + 'px,' + (py * (FH - Dp)).toFixed(1) + 'px,0)';
   }
@@ -826,6 +874,7 @@ document.addEventListener('click', async (e) => {
     case 'copylink': { const url = el.dataset.url; try { await navigator.clipboard.writeText(url); } catch (err) { const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e2) {} ta.remove(); } toast(t('copied')); break; }
     case 'panel': panelOpen = !panelOpen; renderBar(); renderPanelDyn(); break;
     case 'script': S.script = v; D.set.script = v; saveS(); push(['set']); renderAll(); break;
+    case 'en': S.enMode = v; applyEn(); break;
     case 'ann': S.ann = v; D.set.ann = v; saveS(); push(['set']); renderAll(); break;
     case 'mode': setMode(v); break;
     case 'start': startRound(); break;
@@ -860,6 +909,10 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const id = e.target.id;
   if (id === 'capSel') { D.set.cap = +e.target.value; S.cap = +e.target.value; saveS(); push(['set']); renderLists(); }
+  else if (id === 'enN') { S.enN = +e.target.value; applyEn(); }
+  else if (id === 'enGap') { S.enGap = Math.max(1, +e.target.value || 5); applyEn(); }
+  else if (id === 'enMin') { S.enMin = Math.max(1, +e.target.value || 2); applyEn(); }
+  else if (id === 'enRamp') { S.enRamp = e.target.checked; applyEn(); }
   else if (id === 'listSel') { S.cur = e.target.value; const l = S.lists.find((x) => x.id === S.cur); S.text = l ? l.text : ''; saveS(); $('#wordsIn').value = S.text; $('#listName').value = l ? l.name : ''; }
   else if (id === 'muteChk') { S.mute = !e.target.checked; saveS(); }
   else if (id === 'autoT') { S.autoTimer = e.target.checked; saveS(); }
@@ -877,6 +930,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.target.id === 'quickIn') { const v = e.target.value; e.target.value = ''; quickAdd(v); }
 });
 
+window.addEventListener('resize', () => { if (role === 'teacher') renderPanelDyn(); });
 window.__bb = { get D() { return D; }, get S() { return S; }, get room() { return room; }, parseWords, effT };
 loadOpenCC();
 requestAnimationFrame(frame);
