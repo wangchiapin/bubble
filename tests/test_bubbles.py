@@ -23,12 +23,10 @@ def route(ctx):
 
 CAPKEEP=[False]
 def teacher_login(p):
-    p.click('[data-a=teacher]')
-    if not p.locator('#pwIn').count():
-        p.wait_for_selector('#field'); return
-    p.fill('#pwIn', 'wrong'); p.click('[data-a=login]')
-    check('密碼錯誤顯示提示', p.inner_text('#pwErr') != '')
-    p.fill('#pwIn', 'bubble2026'); p.click('[data-a=login]')
+    if p.locator('[data-a=teacher]').count(): p.click('[data-a=teacher]')
+    p.wait_for_selector('#field, #loginBtn')
+    if p.locator('#loginBtn').count():
+        p.click('#loginBtn')
     p.wait_for_selector('#field')
 
 def apply_words(p, text):
@@ -52,11 +50,19 @@ with sync_playwright() as pw:
     # 首頁簡體切換 + 台灣用字
     t.click('[data-a=lang]'); check('首頁切簡體', '我是老师' in t.inner_text('body')); t.click('[data-a=lang]')
     check('首頁切回繁體', '我是老師' in t.inner_text('body'))
+    # 登入畫面（本機模擬 Google 登入）
+    d = ctx.new_page(); d.goto(BASE + '?local=1&deny=1'); d.click('[data-a=teacher]'); d.wait_for_selector('#loginBtn'); d.click('#loginBtn'); d.wait_for_timeout(300)
+    check('非授權帳號被擋並顯示訊息', '不是授權' in d.inner_text('#pwErr') and not d.locator('#field').count())
+    d.close()
+    t.click('[data-a=teacher]'); t.wait_for_selector('#loginBtn')
+    check('老師入口顯示 Google 登入', '請用老師的 Google' in t.inner_text('body'))
     teacher_login(t)
     check('進入老師後台', t.is_visible('#ctl'))
     # 解析
     r = t.evaluate("window.__bb.parseWords('你好 謝謝 老師\\npor favor, hola, gracias\\n你好=hola')")
     check('解析：中文空白、西文逗號、配對', len(r) == 7 and r[6]['tr'] == ['hola'] and r[3]['k'] == 'lat', r)
+    r2 = t.evaluate("window.__bb.parseWords('你好=buenos días 謝謝=gracias 學生 朋友')")
+    check('解析：配對翻譯含空白、混合單字', len(r2) == 4 and r2[0]['tr'] == ['buenos días'] and r2[2]['tr'] is None, r2)
     apply_words(t, '你好 謝謝 老師\npor favor, hola\n你好=hello')
     check('套用字詞', t.evaluate('window.__bb.D.words.length') == 6)
     t.wait_for_function("window.__bb.D.words.filter(w=>w.k=='zh').every(w=>w.py)", timeout=15000)
@@ -217,6 +223,52 @@ with sync_playwright() as pw:
     check('配對分批：目標是已出現的泡泡', tg is not None and t.locator(f'.bub[data-id="{tg}"]').count() == 1, tg)
     t.click('[data-a=endround]'); t.click('[data-a=closeov]')
     t.click('[data-a=mode][data-v=say]'); t.click('[data-a=en][data-v=all]')
+    # ===== 雲端清單、去重複、回到泡泡區、團隊計分、輸出圖片 =====
+    if t.evaluate("window.__bb.D.rd.st") == 'run': t.click('[data-a=endround]')
+    if t.is_visible('.ov'): t.click('[data-a=closeov]')
+    if t.is_hidden('#panel'): t.click('[data-a=panel]')
+    t.fill('#wordsIn', '蘋果 香蕉 蘋果 西瓜\nmanzana, manzana'); t.click('[data-a=apply]'); t.wait_for_timeout(500)
+    check('自動去掉重複字詞', t.evaluate('window.__bb.D.words.length') == 4, t.evaluate('window.__bb.D.words.length'))
+    t.evaluate("document.querySelector('#dedupeChk').click()")
+    t.fill('#wordsIn', '蘋果 蘋果'); t.click('[data-a=apply]'); t.wait_for_timeout(300)
+    check('關閉去重複後可重複', t.evaluate('window.__bb.D.words.length') == 2)
+    t.evaluate("document.querySelector('#dedupeChk').click()")
+    t.fill('#wordsIn', '貓 狗 魚 鳥'); t.fill('#listName', '動物'); t.click('[data-a=listsave]'); t.wait_for_timeout(300)
+    check('清單存到雲端', t.evaluate("JSON.parse(localStorage.getItem('bb_cloud_lists')).lists.some(l=>l.name=='動物')"))
+    t.evaluate("(()=>{const s=JSON.parse(localStorage.getItem('bb_state_v1'));s.lists=[];s.cur='';localStorage.setItem('bb_state_v1',JSON.stringify(s))})()")
+    t.reload(); teacher_login(t)
+    check('換裝置（本機清單清空）從雲端取回清單', t.evaluate("window.__bb.S.lists.some(l=>l.name=='動物')"))
+    t.click('[data-a=panel]'); t.select_option('#listSel', index=1); t.click('[data-a=apply]'); t.wait_for_timeout(500)
+    # 團隊計分
+    t.select_option('#teamN', '2'); t.wait_for_timeout(200)
+    t.locator('[data-teamname="0"]').fill('紅'); t.locator('[data-teamname="0"]').dispatch_event('change')
+    t.click('[data-a=panel]')
+    check('隊伍計分板出現', t.locator('#teams .team').count() == 2 and '紅' in t.inner_text('#teams'))
+    t.click('[data-a=start]'); t.wait_for_selector('.bub')
+    i0 = ids(t)
+    pop_by_id(t, i0[0]); t.wait_for_timeout(300); pop_by_id(t, i0[1]); t.wait_for_timeout(300); pop_by_id(t, i0[2]); t.wait_for_timeout(300)
+    check('每戳破一個換下一隊（紅2、第2隊1）', t.evaluate('window.__bb.teamScores()') == [2, 1], t.evaluate('window.__bb.teamScores()'))
+    t.click('#teams .team >> nth=1'); pop_by_id(t, i0[3]); t.wait_for_timeout(300)
+    check('老師可手動選隊伍', t.evaluate('window.__bb.teamScores()') == [2, 2])
+    # 戳破的字點一下放回泡泡區
+    n_ok = t.locator('.lst.ok .wc.click').count()
+    check('正確清單的字可點', n_ok == 4, n_ok)
+    if t.is_visible('.ov'): t.click('[data-a=closeov]')
+    t.locator('.lst.ok .wc.click').first.click(); t.wait_for_timeout(600)
+    check('點正確清單的字放回泡泡區', t.evaluate('window.__bb.D.rd.popped.length') == 3 and t.locator('.bub').count() == 1 and t.evaluate('window.__bb.teamScores().reduce((a,b)=>a+b)') == 3)
+    pop_by_id(t, t.evaluate("document.querySelector('.bub').dataset.id")); t.wait_for_timeout(700)
+    # 結束後輸出圖片
+    check('全部破完結算，贏家顯示', t.is_visible('.ov') and ('優勝' in t.inner_text('.ov') or '平手' in t.inner_text('.ov')), t.inner_text('.ov'))
+    t.click('[data-a=again]'); t.wait_for_selector('.bub'); t.click('[data-a=endround]'); t.wait_for_selector('.ov')
+    with t.expect_download() as dl: t.click('.ov [data-a=saveimg]')
+    path = dl.value.path(); data = open(path, 'rb').read()
+    check('老師輸出錯誤字詞圖片(PNG)', data[:8] == b'\x89PNG\r\n\x1a\n' and len(data) > 5000, len(data))
+    t.click('[data-a=closeov]')
+    t.select_option('#teamN', '0') if False else None
+    # 登出
+    t.once('dialog', lambda d: d.accept()); t.click('[data-a=logout]'); t.wait_for_selector('[data-a=teacher]')
+    check('登出回首頁並清除登入', t.evaluate("localStorage.getItem('bb_local_login')") is None)
+    teacher_login(t)
     check('整體無 JS 錯誤(老師)', not errs, errs)
 
     # ===== 連線：老師 + 學生 =====
@@ -259,6 +311,18 @@ with sync_playwright() as pw:
     # 結束 → 學生看到結算
     t2.click('[data-a=endround]'); s.wait_for_selector('.ov')
     check('學生看到結算與複習清單', s.locator('.ov .wc').count() == 3)
+    # 學生輸出圖片
+    s.wait_for_selector('.ov')
+    with s.expect_download() as dl2: s.click('.ov [data-a=saveimg]')
+    d2 = open(dl2.value.path(), 'rb').read()
+    check('學生也能輸出錯誤字詞圖片', d2[:8] == b'\x89PNG\r\n\x1a\n' and len(d2) > 5000)
+    # 老師把戳破的字放回，學生同步
+    t2.click('[data-a=closeov]'); t2.click('[data-a=start]'); s.wait_for_function("window.__bb.D.rd.st=='run' && window.__bb.D.rd.order.length==4"); s.wait_for_selector('.bub')
+    if t2.is_visible('.ov'): t2.click('[data-a=closeov]')
+    first = t2.evaluate('window.__bb.D.rd.order[0]'); pop_by_id(t2, first); s.wait_for_timeout(600)
+    check('學生看到字被戳破', s.locator(f'.bub[data-id="{first}"]').count() == 0)
+    t2.locator('.lst.ok .wc.click').first.click(); s.wait_for_timeout(700)
+    check('放回泡泡區後學生也看得到', s.locator(f'.bub[data-id="{first}"]').count() == 1 and s.evaluate('window.__bb.D.rd.popped.length') == 0)
     # 配對
     t3 = ctx.new_page(); t3.goto(BASE + '?local=1'); teacher_login(t3)
     apply_words(t3, '你好=hola 謝謝=gracias 老師=profesor 學生')
@@ -277,7 +341,8 @@ with sync_playwright() as pw:
     t3.once('dialog', lambda d: d.accept()); t3.click('[data-a=endroom]'); s3.wait_for_timeout(600)
     check('結束連線學生收到', '房間已結束' in s3.inner_text('body') or '找不到' in s3.inner_text('body'))
     # 學生靜音、離開
-    s.click('[data-a=closeov]'); s.click('#bMute'); check('學生靜音', s.evaluate('window.__bb.S.mute') is True)
+    if s.locator('[data-a=closeov]').count(): s.click('[data-a=closeov]')
+    s.click('#bMute'); check('學生靜音', s.evaluate('window.__bb.S.mute') is True)
     s.click('[data-a=leave]'); check('學生離開回首頁', s.is_visible('[data-a=teacher]'))
     # 學生輸入房號加入
     s.fill('#joinIn', code); s.click('[data-a=join]'); s.wait_for_selector('#field'); check('輸入房號加入', s.is_visible('.pill.live'))

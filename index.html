@@ -72,6 +72,10 @@ input[type=text],input[type=number],select{border:1.5px solid var(--line);border
 /* 泡泡場 */
 #target{min-height:0}
 .wrap.teacher{position:relative}
+.teams{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.chip.team b{margin-left:4px}
+.wc.click{cursor:pointer}
+.wc.click:hover{border-color:var(--line)}
 #panel{position:absolute;right:12px;width:min(420px,calc(100% - 24px));max-height:72vh;overflow:auto;z-index:15;box-shadow:0 8px 24px rgba(31,29,26,.25);margin:0}
 .phead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .phead b{font-size:15px;letter-spacing:.05em}
@@ -124,15 +128,7 @@ const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const LOCAL = /[?&]local=1/.test(location.search);
 const LS_KEY = 'bb_state_v1';
-const PW_HASH = 8339599222134338;           // 老師密碼的雜湊值（只是介面上的門，不是真正的保密）
-const cyrb53 = (str, seed = 0) => {
-  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
-  for (let i = 0, ch; i < str.length; i++) { ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
-};
-const DEF = { script: 'tc', ann: 'py', speed: 3, size: 5, cap: 0, mode: 'say', timerSel: 'off', timerCustom: 90, autoTimer: true, enMode: 'all', enN: 1, enGap: 5, enRamp: false, enMin: 2, mute: false, lists: [], cur: '', text: '', ok: false };
+const DEF = { script: 'tc', ann: 'py', speed: 3, size: 5, cap: 0, mode: 'say', timerSel: 'off', timerCustom: 90, autoTimer: true, dedupe: true, teamN: 0, teamAuto: true, teamNames: ['第1隊','第2隊','第3隊','第4隊','第5隊','第6隊'], enMode: 'all', enN: 1, enGap: 5, enRamp: false, enMin: 2, mute: false, lists: [], cur: '', text: '', ok: false };
 function loadS() { try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) { return Object.assign({}, DEF); } }
 let S = loadS();
 function saveS() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) {} }
@@ -167,6 +163,11 @@ const T = {
   waitT: ['等老師開始', '等老师开始'], pressStart: ['按「開始本輪」', '按「开始本轮」'], findThis: ['找出', '找出'],
   needWords: ['請先輸入字詞', '请先输入字词'], needPair: ['配對模式要用等號輸入，例如 你好=hola', '配对模式要用等号输入，例如 你好=hola'],
   sound: ['音效', '音效'], tapSound: ['點一下畫面開啟聲音', '点一下画面开启声音'], pyFix: ['拼音微調', '拼音微调'], del: ['刪除', '删除'],
+  loginAsk: ['請用老師的 Google 帳號登入', '请用老师的 Google 帐号登入'], loginBtn: ['用 Google 登入', '用 Google 登入'], notOwner: ['這個帳號不是授權的老師', '这个帐号不是授权的老师'], loginFail: ['登入失敗', '登入失败'], checking: ['確認登入狀態…', '确认登入状态…'], logout: ['登出', '登出'],
+  cloudOk: ['清單已存到雲端', '清单已存到云端'], cloudFail: ['雲端清單連線失敗，先存在這台裝置', '云端清单连线失败，先存在这台装置'], cloudNote: ['清單存在雲端，換裝置登入也看得到', '清单存在云端，换装置登入也看得到'],
+  dedupe: ['自動去掉重複字詞', '自动去掉重复字词'], dedupeN: ['已去掉重複字詞', '已去掉重复字词'], repopHint: ['點字詞可放回泡泡區', '点字词可放回泡泡区'],
+  teams: ['隊伍計分', '队伍计分'], teamOff: ['不計分', '不计分'], teamN: ['隊', '队'], teamAuto: ['每戳破一個換下一隊', '每戳破一个换下一队'], winner: ['優勝', '优胜'], tie: ['平手', '平手'], pts: ['分', '分'],
+  saveImg: ['存成圖片', '存成图片'], imgTitle: ['複習清單 · Lista de repaso', '复习清单 · Lista de repaso'],
   entry: ['進場方式', '进场方式'], enAll: ['全部一次', '全部一次'], enBatch: ['分批進來', '分批进来'], enN: ['每次', '每次'], enNUnit: ['個', '个'], enGap: ['每隔', '每隔'], enRamp: ['逐漸加快', '逐渐加快'], enMin: ['最短', '最短'], pclose: ['收合', '收合'],
   applied: ['已套用', '已套用'], added: ['已加入', '已加入'], modeStudent1: ['請唸出泡泡裡的字詞', '请念出泡泡里的字词'],
 };
@@ -247,6 +248,8 @@ const FireSync = {
   async add(code, field, value) { const { F, db } = await authed(); await F.updateDoc(F.doc(db, COL, code), { [field]: F.arrayUnion(value) }); },
   async remove(code, field, value) { const { F, db } = await authed(); await F.updateDoc(F.doc(db, COL, code), { [field]: F.arrayRemove(value) }); },
   async close(code) { const { F, db } = await authed(); await F.deleteDoc(F.doc(db, COL, code)); },
+  async getLists() { const { F, db } = await authed(); const sn = await F.getDoc(F.doc(db, 'bubble_owner_data', 'lists')); return sn.exists() ? sn.data() : null; },
+  async setLists(lists) { const { F, db } = await authed(); await F.setDoc(F.doc(db, 'bubble_owner_data', 'lists'), { lists, updatedAt: F.serverTimestamp() }); },
   async subscribe(code, cb, errcb) {
     const { F, db } = await authed();
     return F.onSnapshot(F.doc(db, COL, code), (snap) => {
@@ -266,6 +269,8 @@ const LocalSync = {
   async add(code, field, value) { const o = this._r(code); if (!o) return; const a = getPath(o, field) || []; if (!a.includes(value)) a.push(value); setPath(o, field, a); this._w(code, o); },
   async remove(code, field, value) { const o = this._r(code); if (!o) return; setPath(o, field, (getPath(o, field) || []).filter((x) => x !== value)); this._w(code, o); },
   async close(code) { localStorage.removeItem(this._k(code)); },
+  async getLists() { const v = localStorage.getItem('bb_cloud_lists'); return v ? JSON.parse(v) : null; },
+  async setLists(lists) { localStorage.setItem('bb_cloud_lists', JSON.stringify({ lists })); },
   async subscribe(code, cb) {
     const k = this._k(code);
     const read = () => { const v = localStorage.getItem(k); cb(v ? JSON.parse(v) : null, false); };
@@ -290,12 +295,13 @@ const undone = new Set();        // 老師復原過的
 let dismissedN = -1;
 let panelOpen = false;
 
+const teamCfg = () => ({ n: +S.teamN || 0, names: (S.teamNames || []).slice(0, 6), auto: !!S.teamAuto });
 const enCfg = () => ({ m: S.enMode, n: +S.enN || 1, gap: +S.enGap || 5, ramp: !!S.enRamp, min: +S.enMin || 2 });
-const idleRd = (n) => ({ n: n || 0, st: 'idle', order: [], popped: [], miss: [], target: null, rv: [] });
+const idleRd = (n) => ({ n: n || 0, st: 'idle', order: [], popped: [], miss: [], target: null, rv: [], cur: 0, tp: {} });
 function newDoc() {
   return {
     v: 1, ts: 0, nid: 0,
-    set: { script: S.script, ann: S.ann, mode: S.mode, cap: S.cap, size: S.size, en: enCfg() },
+    set: { script: S.script, ann: S.ann, mode: S.mode, cap: S.cap, size: S.size, en: enCfg(), teams: teamCfg() },
     words: [],
     mt: { base: 0, at: Date.now(), sp: S.speed, run: true },
     rd: idleRd(0),
@@ -338,7 +344,13 @@ function parseWords(text) {
     if (!line) continue;
     let pieces;
     if (/[,，、;；]/.test(line)) pieces = line.split(/[,，、;；]/);
-    else if (HAN_RE.test(line)) pieces = ((line.match(/=/g) || []).length >= 2) ? line.split(/\s+(?=\S*=)/) : line.split(/\s+/);
+    else if (HAN_RE.test(line)) {
+      pieces = [];   // 中文用空白分開；配對的西文翻譯裡有空白（buenos días）時，接在前一個配對後面
+      line.split(/\s+/).forEach((tok) => {
+        if (tok.includes('=') || HAN_RE.test(tok) || !pieces.length || !pieces[pieces.length - 1].includes('=')) pieces.push(tok);
+        else pieces[pieces.length - 1] += ' ' + tok;
+      });
+    }
     else pieces = [line];
     for (let p of pieces) {
       p = p.trim(); if (!p) continue;
@@ -437,15 +449,62 @@ function sndPop() {
 function sndWrong() { window.__sounds.wrong++; tone(220, 150, 0.18, 0.2, 'triangle'); }
 function sndEnd() { window.__sounds.end++; tone(660, 660, 0.15, 0.18); setTimeout(() => tone(880, 880, 0.25, 0.18), 160); }
 
+/* ================= 老師登入（Google）與雲端清單 ================= */
+async function ownerCheck() {
+  if (LOCAL) return localStorage.getItem('bb_local_login') === '1' && !/[?&]deny=1/.test(location.search);
+  try {
+    const x = await fb(); await x.auth.authStateReady();
+    const u = x.auth.currentUser; if (!u || u.isAnonymous) return false;
+    await x.F.getDoc(x.F.doc(x.db, 'bubble_owner_data', 'lists'));      // 只有授權老師讀得到，不是老師會被規則擋掉
+    return true;
+  } catch (e) { ownerCheck.err = e.code || e.message || ''; return false; }
+}
+async function ownerLogin() {              // 成功回傳 null，失敗回傳訊息
+  if (LOCAL) { if (/[?&]deny=1/.test(location.search)) return t('notOwner'); localStorage.setItem('bb_local_login', '1'); return null; }
+  let x;
+  try { x = await fb(); } catch (e) { return t('connFail') + '（' + (e.code || e.message || e) + '）'; }
+  try { await x.auth.authStateReady(); if (!x.auth.currentUser || x.auth.currentUser.isAnonymous) await x.Au.signInWithPopup(x.auth, new x.Au.GoogleAuthProvider()); }
+  catch (e) { return t('loginFail') + '（' + (e.code || e.message || e) + '）'; }
+  if (!(await ownerCheck())) { try { await x.Au.signOut(x.auth); } catch (e) {} return t('notOwner') + '（' + (ownerCheck.err || '') + '）'; }
+  return null;
+}
+async function ownerLogout() {
+  cloudOK = false;
+  if (LOCAL) localStorage.removeItem('bb_local_login');
+  else { try { const x = await fb(); await x.Au.signOut(x.auth); } catch (e) {} }
+}
+let cloudOK = false;
+async function cloudLoad() {
+  try {
+    const d = await Sync.getLists(); cloudOK = true;
+    if (d && Array.isArray(d.lists)) { S.lists = d.lists; if (!S.lists.find((l) => l.id === S.cur)) S.cur = ''; saveS(); }
+    else if (S.lists.length) await Sync.setLists(S.lists);               // 雲端還沒有：把這台裝置原有的清單搬上去
+  } catch (e) { cloudOK = false; toast(t('cloudFail'), 5000); }
+}
+async function cloudSave() {
+  saveS(); if (!cloudOK) return;
+  try { await Sync.setLists(S.lists); toast(t('cloudOk')); } catch (e) { toast(t('cloudFail'), 5000); }
+}
+async function enterTeacher() { await cloudLoad(); role = 'teacher'; renderRoot(); }
+
 /* ================= 老師動作 ================= */
 function rdPublishFull() { push(['rd']); }
+const keyItem = (it) => (it.k === 'zh' ? conv.toTW(it.main) : it.main).toLowerCase() + '|' + (it.tr || []).join('/').toLowerCase();
+const keyWord = (w) => w.tc.toLowerCase() + '|' + (w.tr || []).join('/').toLowerCase();
+function dedupeItems(items, existing) {
+  if (!S.dedupe) return items;
+  const seen = new Set((existing || []).map(keyWord)), out = [];
+  items.forEach((it) => { const k = keyItem(it); if (!seen.has(k)) { seen.add(k); out.push(it); } });
+  if (out.length < items.length) toast(t('dedupeN') + '：' + (items.length - out.length));
+  return out;
+}
 async function applyText() {
   const txt = ($('#wordsIn') || {}).value || '';
   S.text = txt; saveS();
   const items = parseWords(txt);
   if (!items.length) { toast(t('needWords')); return; }
   await loadOpenCC();
-  D.words = items.map((it) => mkWord(it, 0));
+  D.words = dedupeItems(items, []).map((it) => mkWord(it, 0));
   D.rd = idleRd(D.rd.n + 1); localPop.clear(); undone.clear();
   push(['words', 'rd']); renderAll(); annotate(D.words);
   toast(t('applied'));
@@ -455,7 +514,9 @@ async function quickAdd(text) {
   if (!items.length) return;
   await loadOpenCC();
   const born = effT();
-  const ws = items.map((it) => mkWord(it, born));
+  const fresh = dedupeItems(items, D.words);
+  if (!fresh.length) return;
+  const ws = fresh.map((it) => mkWord(it, born));
   D.words = D.words.concat(ws);
   if (D.rd.st === 'run') {
     const ok = ws.filter((w) => D.set.mode !== 'match' || (w.tr && w.tr.length));
@@ -473,7 +534,7 @@ function startRound(ids) {
   const t0 = effT();
   pool.forEach((w) => { w.m = mkMotion(t0); });
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  D.rd = { n: D.rd.n + 1, st: 'run', order: pool.map((w) => w.id), popped: [], miss: [], target: null, rv: [] };
+  D.rd = { n: D.rd.n + 1, st: 'run', order: pool.map((w) => w.id), popped: [], miss: [], target: null, rv: [], cur: 0, tp: {} };
   D.mt = { base: t0, at: now(), sp: D.mt.sp, run: true };
   schedule(D.rd.order, t0);
   localPop.clear(); undone.clear(); dismissedN = -1;
@@ -500,6 +561,38 @@ function endRound(why) {
   sndEnd(); dismissedN = -1;
   push(['rd', 'mt', 'tm']); renderAll();
 }
+function teamScores() {
+  const tc = D.set.teams || { n: 0 }, sc = Array(tc.n).fill(0), tp = D.rd.tp || {};
+  poppedIds().forEach((id) => { const k = tp[id]; if (k != null && k < tc.n) sc[k]++; });
+  return sc;
+}
+function assignTeam(id) {
+  const tc = D.set.teams; if (role !== 'teacher' || !tc || !tc.n) return;
+  D.rd.tp = D.rd.tp || {}; if (D.rd.tp[id] != null) return;
+  const cur = (D.rd.cur || 0) % tc.n; D.rd.tp[id] = cur;
+  if (tc.auto) D.rd.cur = (cur + 1) % tc.n;
+  push(['rd.tp', 'rd.cur']);
+}
+function setTeam(k) { D.rd.cur = k; push(['rd.cur']); renderTeams(); }
+function renderTeams() {
+  const el = $('#teams'); if (!el || !D) return;
+  const tc = D.set.teams;
+  if (!tc || !tc.n) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  const sc = teamScores(), cur = (D.rd.cur || 0) % tc.n;
+  el.style.display = '';
+  el.innerHTML = Array.from({ length: tc.n }, (_, i) => '<button class="chip team' + (i === cur ? ' on' : '') + '"' + (role === 'teacher' ? ' data-a="team" data-v="' + i + '"' : ' tabindex="-1"') + '>' + esc(tc.names[i] || ('第' + (i + 1) + '隊')) + ' <b>' + sc[i] + '</b></button>').join('');
+}
+function repop(id) {
+  if (role !== 'teacher' || !D || D.rd.st === 'idle') return;
+  const s = pk(D.rd.n, id); if (!D.rd.popped.includes(s)) return;
+  D.rd.popped = D.rd.popped.filter((x) => x !== s); undone.add(s); lb.delete(id);
+  if (D.rd.tp) delete D.rd.tp[id];
+  const w = wmap().get(id); if (w) w.m = mkMotion(effT());
+  if (room) Sync.remove(room.code, 'rd.popped', s).catch(() => {});
+  if (D.rd.st === 'end') { D.rd.st = 'run'; D.rd.rv = []; D.mt = { base: effT(), at: now(), sp: D.mt.sp, run: true }; dismissedN = -1; push(['rd', 'mt', 'words']); }
+  else push(['rd.tp', 'words']);
+  renderAll();
+}
 function popTeacher(id, el) {
   const rd = D.rd; if (rd.st !== 'run' || poppedIds().includes(id)) return;
   if (D.set.mode === 'match') {
@@ -509,6 +602,7 @@ function popTeacher(id, el) {
   }
   const s = pk(rd.n, id); rd.popped.push(s); undone.delete(s);
   if (room) Sync.add(room.code, 'rd.popped', s).catch(() => toast(t('connFail')));
+  assignTeam(id);
   renderLists(); updateCtl();
 }
 function wrongFx(el, targetId) {
@@ -523,6 +617,7 @@ function undoPop() {
   const ids = poppedIds(); if (!ids.length) return;
   const last = pk(D.rd.n, ids[ids.length - 1]);
   D.rd.popped = D.rd.popped.filter((x) => x !== last); undone.add(last);
+  if (D.rd.tp) { delete D.rd.tp[ids[ids.length - 1]]; push(['rd.tp']); }
   if (D.rd.st === 'end') { D.rd.st = 'run'; D.rd.rv = []; D.mt = { base: D.mt.base, at: now(), sp: D.mt.sp, run: true }; dismissedN = -1; push(['rd', 'mt']); }
   else if (room) Sync.remove(room.code, 'rd.popped', last).catch(() => {});
   if (D.set.mode === 'match' && D.rd.target === ids[ids.length - 1]) { /* 目標回來了 */ }
@@ -571,7 +666,7 @@ async function endRoom() { if (!room) return; const c = room.code; try { room.un
 function mergeRemote(d) {
   if (!d || !d.rd || d.rd.n !== D.rd.n) return;
   let ch = false;
-  (d.rd.popped || []).forEach((s) => { if (!D.rd.popped.includes(s) && !undone.has(s)) { D.rd.popped.push(s); ch = true; if (D.set.mode === 'match') nextAdv = now() + 650; } });
+  (d.rd.popped || []).forEach((s) => { if (!D.rd.popped.includes(s) && !undone.has(s)) { D.rd.popped.push(s); assignTeam(s.slice(s.indexOf(':') + 1)); ch = true; if (D.set.mode === 'match') nextAdv = now() + 650; } });
   (d.rd.miss || []).forEach((s) => { if (!D.rd.miss.includes(s)) { D.rd.miss.push(s); ch = true; } });
   if (ch) { renderLists(); updateCtl(); }
 }
@@ -586,6 +681,7 @@ async function joinRoom(code) {
       if (!d) { sErr = D ? t('expired') : t('badRoom'); D = null; renderRoot(); return; }
       if (!pending && d.ts) { const sk = Date.now() - d.ts; if (!window.__skewSet || sk < skew) { skew = sk; window.__skewSet = true; } }
       const old = D; D = d; sErr = '';
+      if (old && old.words) d.words.forEach((w) => { const ow = old.words.find((x) => x.id === w.id); if (ow && ow.m && w.m && ow.m.born !== w.m.born) localPop.delete(w.id); });
       if (!old || !old.rd || old.rd.n !== d.rd.n) { localPop.clear(); dismissedN = -1; }
       if (!old) renderRoot(); else renderStudentParts();
     }, () => { sErr = t('connFail'); renderRoot(); });
@@ -623,9 +719,7 @@ function renderHome() {
 }
 function renderPw() {
   app.innerHTML = '<div class="wrap"><div class="top"><span class="brand">' + t('title') + '</span>' + langBtn() + '<button class="chip" data-a="home">' + t('back') + '</button></div>' +
-    '<div class="home" style="margin-top:6vh"><p>' + t('pwAsk') + '</p><div class="join"><input class="pwin" id="pwIn" type="password" autocomplete="off" style="letter-spacing:.1em"><button class="btn primary" data-a="login">' + t('enter') + '</button></div>' +
-    '<label class="note" style="display:block;margin-top:10px"><input type="checkbox" id="pwRem" checked> ' + t('remember') + '</label><div class="err" id="pwErr"></div></div></div>';
-  setTimeout(() => { const i = $('#pwIn'); i && i.focus(); }, 30);
+    '<div class="home" style="margin-top:6vh"><p>' + t('loginAsk') + '</p><button class="btn primary" data-a="login" id="loginBtn">' + t('loginBtn') + '</button><div class="err" id="pwErr"></div></div></div>';
 }
 function tabBtns(key, list, sel) { return '<span class="seg">' + list.map(([v, label]) => '<button class="chip" data-a="' + key + '" data-v="' + v + '" data-on="' + key + ':' + v + '">' + label + '</button>').join('') + '</span>'; }
 function renderTeacher() {
@@ -642,6 +736,7 @@ function renderTeacher() {
     '</div>' +
     '<div class="sec hide" id="panel"></div>' +
     '<div class="tmr" id="tmr"></div>' +
+    '<div class="teams" id="teams"></div>' +
     '<div id="target"></div>' +
     '<div id="field"></div>' +
     '<div class="lists" id="lists"></div>' +
@@ -657,7 +752,7 @@ function renderStudent() {
   }
   app.innerHTML = '<div class="wrap student"><div class="top"><span class="brand">' + t('title') + '</span><span class="pill live">' + t('roomLabel') + ' ' + esc(sCode) + '</span>' +
     '<button class="chip" data-a="mute" id="bMute"></button><button class="chip" data-a="leave">' + t('leave') + '</button></div>' +
-    '<div class="tmr" id="tmr"></div><div id="target"></div><div id="field"></div><div class="lists" id="lists"></div><div id="overlay"></div></div>';
+    '<div class="tmr" id="tmr"></div><div class="teams" id="teams"></div><div id="target"></div><div id="field"></div><div class="lists" id="lists"></div><div id="overlay"></div></div>';
   fieldReset(); renderStudentParts();
 }
 function renderStudentParts() { if (role !== 'student' || !D) return; const m = $('#bMute'); if (m) m.textContent = t('sound') + (S.mute ? ' ✕' : ' ✓'); renderTimer(); renderTarget(); renderLists(); renderOverlay(); }
@@ -672,7 +767,7 @@ function renderBar() {
   } else r = '<span class="pill">' + t('standalone') + '</span>' + (roomBusy ? '<span class="note">' + t('creating') + '</span>' : '') + '<button class="btn small primary" data-a="openroom"' + (roomBusy ? ' disabled' : '') + '>' + t('openRoom') + '</button>';
   el.innerHTML = '<span class="brand">' + t('title') + '</span>' + r + '<button class="chip' + (panelOpen ? ' on' : '') + '" data-a="panel">' + t('settings') + '</button>' +
     '<span class="seg">' + [['tc', t('tc')], ['sc', t('sc')]].map(([v, l]) => '<button class="chip' + (S.script === v ? ' on' : '') + '" data-a="script" data-v="' + v + '">' + l + '</button>').join('') + '</span>' +
-    '<button class="chip" data-a="home">' + t('back') + '</button>';
+    '<button class="chip" data-a="home">' + t('back') + '</button><button class="chip" data-a="logout">' + t('logout') + '</button>';
 }
 function updateCtl() {
   if (role !== 'teacher') return;
@@ -694,12 +789,13 @@ function buildPanel() {
   const el = $('#panel');
   el.innerHTML =
     '<div class="phead"><b>' + t('settings') + '</b><button class="btn small" data-a="panel">' + t('pclose') + ' ✕</button></div>' +
-    '<div class="g"><h2>' + t('lists') + '</h2><div class="row"><select id="listSel"></select><input type="text" id="listName" placeholder="' + esc(t('listName')) + '" style="flex:1;min-width:120px"><button class="btn small" data-a="listsave">' + t('saveList') + '</button><button class="btn small danger" data-a="listdel">' + t('delList') + '</button></div></div>' +
-    '<div class="g"><h2>' + t('words') + '</h2><textarea id="wordsIn" placeholder="' + esc(t('wordsPh')) + '"></textarea><div class="row" style="margin-top:6px"><button class="btn primary" data-a="apply">' + t('apply') + '</button><span class="note">' + t('help') + '</span></div></div>' +
+    '<div class="g"><h2>' + t('lists') + '</h2><div class="note" style="margin-bottom:6px">☁ ' + t('cloudNote') + '</div><div class="row"><select id="listSel"></select><input type="text" id="listName" placeholder="' + esc(t('listName')) + '" style="flex:1;min-width:120px"><button class="btn small" data-a="listsave">' + t('saveList') + '</button><button class="btn small danger" data-a="listdel">' + t('delList') + '</button></div></div>' +
+    '<div class="g"><h2>' + t('words') + '</h2><textarea id="wordsIn" placeholder="' + esc(t('wordsPh')) + '"></textarea><div class="row" style="margin-top:6px"><button class="btn primary" data-a="apply">' + t('apply') + '</button><span class="note">' + t('help') + '</span></div><label style="display:block;margin-top:6px"><input type="checkbox" id="dedupeChk"> ' + t('dedupe') + '</label></div>' +
     '<div class="g row"><span><b>' + t('ann') + '</b> ' + tabBtns('ann', [['py', t('py')], ['zy', t('zy')], ['none', t('none')]]) + '</span>' +
       '<span><b>' + t('script') + '</b> ' + tabBtns('script', [['tc', t('tc')], ['sc', t('sc')]]) + '</span>' +
       '<label><b>' + t('cap') + '</b> <select id="capSel"></select></label>' +
       '<label><input type="checkbox" id="muteChk"> ' + t('sound') + '</label></div>' +
+    '<div class="g row"><b>' + t('teams') + '</b> <select id="teamN"></select> <label><input type="checkbox" id="teamAuto"> ' + t('teamAuto') + '</label><span id="teamNames" class="row"></span></div>' +
     '<div class="g row"><b>' + t('entry') + '</b> ' + tabBtns('en', [['all', t('enAll')], ['batch', t('enBatch')]]) +
       '<span id="enOpts" class="row">' + t('enN') + ' <select id="enN"></select> ' + t('enNUnit') + ' · ' + t('enGap') + ' <input type="number" id="enGap" min="1" max="60" style="width:62px"> ' + t('secs') +
       ' <label><input type="checkbox" id="enRamp"> ' + t('enRamp') + '</label><span id="enMinW">' + t('enMin') + ' <input type="number" id="enMin" min="1" max="60" style="width:62px"> ' + t('secs') + '</span></span></div>' +
@@ -711,8 +807,20 @@ function buildPanel() {
   $('#capSel').innerHTML = [0, 1, 2, 3, 5, 8, 10, 15, 20].map((n) => '<option value="' + n + '">' + (n ? n : t('capAll')) + '</option>').join('');
   $('#enN').innerHTML = [1, 2, 3, 4, 5, 6, 8, 10].map((n) => '<option value="' + n + '">' + n + '</option>').join('');
   $('#enN').value = S.enN; $('#enGap').value = S.enGap; $('#enMin').value = S.enMin; $('#enRamp').checked = !!S.enRamp;
+  $('#teamN').innerHTML = [0, 2, 3, 4, 5, 6].map((n) => '<option value="' + n + '">' + (n ? n + t('teamN') : t('teamOff')) + '</option>').join('');
+  $('#teamN').value = S.teamN; $('#teamAuto').checked = !!S.teamAuto; $('#dedupeChk').checked = !!S.dedupe; fillTeamNames();
   $('#capSel').value = D.set.cap; $('#muteChk').checked = !S.mute; $('#autoT').checked = !!S.autoTimer; $('#custSec').value = S.timerCustom;
   fillListSel();
+}
+function fillTeamNames() {
+  const w = $('#teamNames'); if (!w) return;
+  w.innerHTML = Array.from({ length: S.teamN }, (_, i) => '<input type="text" data-teamname="' + i + '" value="' + esc(S.teamNames[i] || '') + '" style="width:92px">').join('');
+  w.style.display = S.teamN ? '' : 'none';
+}
+function applyTeams() {
+  saveS(); D.set.teams = teamCfg();
+  if ((D.rd.cur || 0) >= (S.teamN || 1)) D.rd.cur = 0;
+  push(['set', 'rd.cur']); fillTeamNames(); renderAll();
 }
 function fillListSel() {
   const sel = $('#listSel'); if (!sel) return;
@@ -749,15 +857,23 @@ function renderTarget() {
   const a = w.k === 'zh' ? (D.set.ann === 'py' ? w.py : D.set.ann === 'zy' ? w.zy : '') : '';
   el.innerHTML = '<div class="target"><span class="note">' + t('findThis') + '</span><span class="big">' + esc(SC() ? w.sc : w.tc) + '</span>' + (a ? '<small>' + esc(a) + '</small>' : '') + '</div>';
 }
-function chip(w) { if (!w) return ''; const a = w.k === 'zh' ? (D.set.ann === 'py' ? w.py : D.set.ann === 'zy' ? w.zy : '') : ''; return '<span class="wc">' + (a ? '<small>' + esc(a) + '</small>' : '') + esc(SC() ? w.sc : w.tc) + '</span>'; }
+function chip(w, click) { if (!w) return ''; const a = w.k === 'zh' ? (D.set.ann === 'py' ? w.py : D.set.ann === 'zy' ? w.zy : '') : ''; return '<span class="wc' + (click ? ' click' : '') + '"' + (click ? ' data-a="repop" data-id="' + w.id + '"' : '') + '>' + (a ? '<small>' + esc(a) + '</small>' : '') + esc(SC() ? w.sc : w.tc) + '</span>'; }
 function renderLists() {
   const el = $('#lists'); if (!el || !D) return;
   const W = wmap(); const rd = D.rd;
   let ok = poppedIds(); if (role === 'student') localPop.forEach((id) => { if (!ok.includes(id)) ok.push(id); });
   const rem = rd.st === 'run' ? remainingIds().length - (role === 'student' ? localPop.size : 0) : 0;
   const rvIds = rd.st === 'end' ? rd.rv : [];
-  el.innerHTML = '<div class="lst ok"><h3>' + t('okList') + ' (' + ok.length + ')' + (rd.st === 'run' ? ' · ' + t('left') + ' ' + Math.max(0, rem) : '') + '</h3>' + ok.map((id) => chip(W.get(id))).join('') + '</div>' +
-    '<div class="lst rv"><h3>' + t('rvList') + (rd.st === 'end' ? ' (' + rvIds.length + ')' : '') + '</h3>' + (rd.st === 'end' ? rvIds.map((id) => chip(W.get(id))).join('') : '<span class="note">' + t('rvLater') + '</span>') + '</div>';
+  renderTeams();
+  el.innerHTML = '<div class="lst ok"><h3>' + t('okList') + ' (' + ok.length + ')' + (rd.st === 'run' ? ' · ' + t('left') + ' ' + Math.max(0, rem) : '') + '</h3>' + (role === 'teacher' && ok.length ? '<div class="note" style="margin-bottom:6px">' + t('repopHint') + '</div>' : '') + ok.map((id) => chip(W.get(id), role === 'teacher')).join('') + '</div>' +
+    '<div class="lst rv"><h3>' + t('rvList') + (rd.st === 'end' ? ' (' + rvIds.length + ')' : '') + (rd.st === 'end' && rvIds.length ? ' <button class="btn small" data-a="saveimg" style="margin-left:8px">' + t('saveImg') + '</button>' : '') + '</h3>' + (rd.st === 'end' ? rvIds.map((id) => chip(W.get(id))).join('') : '<span class="note">' + t('rvLater') + '</span>') + '</div>';
+}
+function teamRank() {
+  const tc = D.set.teams; if (!tc || !tc.n) return '';
+  const sc = teamScores(), mx = Math.max(...sc), top = sc.map((v, i) => (v === mx ? i : -1)).filter((i) => i >= 0);
+  const rows = sc.map((v, i) => [i, v]).sort((a, b) => b[1] - a[1]).map(([i, v]) => '<span class="pill" style="margin:0 6px 6px 0">' + esc(tc.names[i] || ('第' + (i + 1) + '隊')) + ' ' + v + t('pts') + '</span>').join('');
+  const head = mx === 0 ? '' : (top.length > 1 ? t('tie') : t('winner') + '：' + esc(tc.names[top[0]] || ('第' + (top[0] + 1) + '隊')));
+  return '<div style="margin-bottom:10px">' + (head ? '<div style="font-weight:700;margin-bottom:6px">' + head + '</div>' : '') + rows + '</div>';
 }
 function renderOverlay() {
   const el = $('#overlay'); if (!el || !D) return;
@@ -765,8 +881,47 @@ function renderOverlay() {
   if (rd.st !== 'end' || dismissedN === rd.n) { el.innerHTML = ''; return; }
   const W = wmap(); const okN = poppedIds().length, rv = rd.rv || [];
   el.innerHTML = '<div class="ov"><div class="ovc"><h2>' + (rd.why === 'time' ? t('timeUp') + ' · ' : '') + t('roundDone') + '</h2><div class="nums"><span>' + t('correct') + ' <b>' + okN + '</b></span><span>' + t('toReview') + ' <b>' + rv.length + '</b></span></div>' +
+    teamRank() +
     '<div class="lst rv" style="margin-bottom:10px"><h3>' + t('rvList') + '</h3>' + rv.map((id) => chip(W.get(id))).join('') + '</div>' +
-    '<div class="row">' + (role === 'teacher' ? '<button class="btn primary" data-a="review"' + (rv.length ? '' : ' disabled') + '>' + t('practiceRv') + '</button><button class="btn" data-a="again">' + t('again') + '</button>' : '') + '<button class="btn" data-a="closeov">' + t('close') + '</button></div></div></div>';
+    '<div class="row">' + (rv.length ? '<button class="btn" data-a="saveimg">' + t('saveImg') + '</button>' : '') + (role === 'teacher' ? '<button class="btn primary" data-a="review"' + (rv.length ? '' : ' disabled') + '>' + t('practiceRv') + '</button><button class="btn" data-a="again">' + t('again') + '</button>' : '') + '<button class="btn" data-a="closeov">' + t('close') + '</button></div></div></div>';
+}
+
+/* ================= 把複習清單輸出成圖片（老師、學生都可以） ================= */
+function buildReviewCanvas() {
+  const W = wmap(), items = (D.rd.rv || []).map((id) => W.get(id)).filter(Boolean).slice(0, 80), sc = SC();
+  const FONT = '"Noto Sans TC","PingFang TC","Microsoft JhengHei","Noto Sans SC","PingFang SC",system-ui,sans-serif';
+  const cw = 1080, pad = 56, gap = 24, cardW = (cw - pad * 2 - gap) / 2, cardH = 170, head = 150;
+  const rows = Math.max(1, Math.ceil(items.length / 2)), ch = head + rows * (cardH + gap) + 70;
+  const cv = document.createElement('canvas'); cv.width = cw * 2; cv.height = ch * 2;
+  const g = cv.getContext('2d'); g.scale(2, 2);
+  g.fillStyle = '#e8e1d3'; g.fillRect(0, 0, cw, ch);
+  g.fillStyle = '#1f1d1a'; g.textBaseline = 'alphabetic';
+  g.font = '700 46px ' + FONT; g.fillText(t('imgTitle'), pad, 84);
+  g.font = '400 24px ' + FONT; g.fillStyle = '#6a6457';
+  const d = new Date(); g.fillText(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '  ·  ' + items.length, pad, 122);
+  const fit = (txt, size, weight, maxW) => { let sz = size; g.font = weight + ' ' + sz + 'px ' + FONT; while (g.measureText(txt).width > maxW && sz > 14) { sz -= 2; g.font = weight + ' ' + sz + 'px ' + FONT; } return sz; };
+  items.forEach((w, i) => {
+    const x = pad + (i % 2) * (cardW + gap), y = head + Math.floor(i / 2) * (cardH + gap);
+    g.fillStyle = '#fffdf7'; g.fillRect(x, y, cardW, cardH); g.strokeStyle = '#2a2722'; g.lineWidth = 1.5; g.strokeRect(x, y, cardW, cardH);
+    g.textAlign = 'center'; const cx = x + cardW / 2, mw = cardW - 36;
+    const a = w.k === 'zh' ? (D.set.ann === 'py' ? w.py : D.set.ann === 'zy' ? w.zy : '') : '';
+    const main = sc ? w.sc : w.tc, tr = (w.tr || []).join(' / ');
+    let yy = y + (a ? 38 : 30);
+    if (a) { fit(a, 24, '400', mw); g.fillStyle = '#6a6457'; g.fillText(a, cx, yy); yy += 6; }
+    const msz = fit(main, 58, '600', mw); g.fillStyle = '#1f1d1a'; g.fillText(main, cx, yy + msz * 0.95);
+    if (tr) { fit(tr, 26, '400', mw); g.fillStyle = '#6a6457'; g.fillText(tr, cx, y + cardH - 18); }
+  });
+  g.textAlign = 'right'; g.font = '400 20px ' + FONT; g.fillStyle = '#6a6457'; g.fillText(t('title'), cw - pad, ch - 26);
+  return cv;
+}
+function reviewBlob() { return new Promise((res) => buildReviewCanvas().toBlob(res, 'image/png')); }
+async function saveReviewImage() {
+  if (!D || !(D.rd.rv || []).length) return;
+  const blob = await reviewBlob(); if (!blob) return;
+  const d = new Date(), name = 'repaso-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '.png';
+  const file = new File([blob], name, { type: 'image/png' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: t('imgTitle') }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 /* ================= 泡泡畫面（每一格都由時間算出位置） ================= */
@@ -860,12 +1015,13 @@ document.addEventListener('click', async (e) => {
   const a = el.dataset.a, v = el.dataset.v;
   switch (a) {
     case 'lang': S.script = S.script === 'sc' ? 'tc' : 'sc'; saveS(); renderRoot(); break;
-    case 'teacher': if (S.ok) { role = 'teacher'; renderRoot(); } else { role = 'pw'; renderRoot(); } break;
+    case 'teacher': { toast(t('checking'), 1500); if (await ownerCheck()) await enterTeacher(); else { role = 'pw'; renderRoot(); } break; }
     case 'login': {
-      const pw = ($('#pwIn') || {}).value || '';
-      if (cyrb53(pw) === PW_HASH) { if ($('#pwRem') && $('#pwRem').checked) { S.ok = true; saveS(); } role = 'teacher'; renderRoot(); } else { $('#pwErr').textContent = t('pwBad'); }
+      el.disabled = true; const msg = await ownerLogin(); el.disabled = false;
+      if (msg) { const e2 = $('#pwErr'); if (e2) e2.textContent = msg; } else await enterTeacher();
       break;
     }
+    case 'logout': { if (room && !confirm(t('endRoom') + '？')) break; await endRoom(); await ownerLogout(); role = null; renderRoot(); break; }
     case 'join': { const c = (($('#joinIn') || {}).value || '').trim(); if (!/^\d{4}$/.test(c)) { $('#joinErr').textContent = t('badRoom'); break; } joinRoom(c); break; }
     case 'home': if (role === 'teacher') { if (room && !confirm(t('endRoom') + '？')) break; await endRoom(); } role = null; sErr = ''; renderRoot(); break;
     case 'leave': leaveStudent(); break;
@@ -888,9 +1044,9 @@ document.addEventListener('click', async (e) => {
       const txt = ($('#wordsIn') || {}).value || ''; S.text = txt;
       let l = S.lists.find((x) => x.id === S.cur);
       if (l) { l.name = name; l.text = txt; } else { l = { id: 'l' + Date.now(), name, text: txt }; S.lists.push(l); S.cur = l.id; }
-      saveS(); fillListSel(); toast(t('saved')); break;
+      fillListSel(); cloudSave(); toast(t('saved')); break;
     }
-    case 'listdel': { const l = S.lists.find((x) => x.id === S.cur); if (!l) break; if (!confirm(t('delConfirm'))) break; S.lists = S.lists.filter((x) => x.id !== l.id); S.cur = ''; saveS(); fillListSel(); $('#wordsIn').value = ''; S.text = ''; saveS(); toast(t('deleted')); break; }
+    case 'listdel': { const l = S.lists.find((x) => x.id === S.cur); if (!l) break; if (!confirm(t('delConfirm'))) break; S.lists = S.lists.filter((x) => x.id !== l.id); S.cur = ''; S.text = ''; $('#wordsIn').value = ''; fillListSel(); cloudSave(); toast(t('deleted')); break; }
     case 'tsel': S.timerSel = v; saveS(); tmConfig(); renderPanelDyn(); updateCtl(); break;
     case 'tstart': tmStart(); break;
     case 'tpause': tmPause(); break;
@@ -898,6 +1054,9 @@ document.addEventListener('click', async (e) => {
     case 'review': { const ids = (D.rd.rv || []).slice(); startRound(ids); break; }
     case 'again': startRound(); break;
     case 'closeov': dismissedN = D.rd.n; renderOverlay(); break;
+    case 'saveimg': saveReviewImage(); break;
+    case 'repop': repop(el.dataset.id); break;
+    case 'team': setTeam(+v); break;
     case 'mute': S.mute = !S.mute; saveS(); renderStudentParts(); break;
   }
 });
@@ -909,6 +1068,10 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const id = e.target.id;
   if (id === 'capSel') { D.set.cap = +e.target.value; S.cap = +e.target.value; saveS(); push(['set']); renderLists(); }
+  else if (id === 'teamN') { S.teamN = +e.target.value; applyTeams(); }
+  else if (id === 'teamAuto') { S.teamAuto = e.target.checked; applyTeams(); }
+  else if (id === 'dedupeChk') { S.dedupe = e.target.checked; saveS(); }
+  else if (e.target.dataset && e.target.dataset.teamname != null) { S.teamNames[+e.target.dataset.teamname] = e.target.value.trim() || ('第' + (+e.target.dataset.teamname + 1) + '隊'); applyTeams(); }
   else if (id === 'enN') { S.enN = +e.target.value; applyEn(); }
   else if (id === 'enGap') { S.enGap = Math.max(1, +e.target.value || 5); applyEn(); }
   else if (id === 'enMin') { S.enMin = Math.max(1, +e.target.value || 2); applyEn(); }
@@ -925,13 +1088,13 @@ document.addEventListener('change', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
-  if (e.target.id === 'pwIn') { $('[data-a="login"]').click(); }
-  else if (e.target.id === 'joinIn') { $('[data-a="join"]').click(); }
+  if (e.target.id === 'joinIn') { $('[data-a="join"]').click(); }
   else if (e.target.id === 'quickIn') { const v = e.target.value; e.target.value = ''; quickAdd(v); }
 });
 
 window.addEventListener('resize', () => { if (role === 'teacher') renderPanelDyn(); });
-window.__bb = { get D() { return D; }, get S() { return S; }, get room() { return room; }, parseWords, effT };
+window.__bb = {
+  reviewBlob, buildReviewCanvas, teamScores, get D() { return D; }, get S() { return S; }, get room() { return room; }, parseWords, effT };
 loadOpenCC();
 requestAnimationFrame(frame);
 { const m = location.search.match(/[?&]room=(\d{4})/); if (m) joinRoom(m[1]); else renderRoot(); }
