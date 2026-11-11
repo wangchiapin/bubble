@@ -223,6 +223,13 @@ with sync_playwright() as pw:
     check('配對分批：目標是已出現的泡泡', tg is not None and t.locator(f'.bub[data-id="{tg}"]').count() == 1, tg)
     t.click('[data-a=endround]'); t.click('[data-a=closeov]')
     t.click('[data-a=mode][data-v=say]'); t.click('[data-a=en][data-v=all]')
+    # 連線卡住時不會一直停在首頁：逾時後顯示登入畫面
+    hang = br.new_context(viewport={'width': 400, 'height': 800})
+    held = []
+    hang.route('**/gstatic.com/**', lambda r: held.append(r))
+    hp = hang.new_page(); hp.goto(BASE + '?tmo=1500'); hp.click('[data-a=teacher]'); hp.wait_for_selector('#loginBtn', timeout=6000)
+    check('Firebase 連線卡住：逾時後出現登入畫面與提示', '連線失敗' in hp.inner_text('#pwErr'), hp.inner_text('#pwErr'))
+    hang.close()
     # ===== 雲端清單、去重複、回到泡泡區、團隊計分、輸出圖片 =====
     if t.evaluate("window.__bb.D.rd.st") == 'run': t.click('[data-a=endround]')
     if t.is_visible('.ov'): t.click('[data-a=closeov]')

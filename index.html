@@ -211,19 +211,30 @@ function pyToZy(py) { return String(py || '').trim().split(/\s+/).filter(Boolean
 /* ================= 連線層（跟 造句小劇場 一樣：Firebase memorma-24dab） ================= */
 const FB = { cfg: { apiKey: 'AIzaSyC_YSDn2OH6_GKKwCq0d8QFNl3fYXzTC60', authDomain: 'memorma-24dab.firebaseapp.com', projectId: 'memorma-24dab', appId: '1:806709458465:web:f0d12acb2f911f2f165560' }, V: '12.17.1' };
 const COL = 'bubble_rooms';
-let fbp = null;
-function fb() {
-  if (fbp) return fbp;
-  fbp = (async () => {
+let fbp = null, fbb = null;
+const TMO = +((location.search.match(/[?&]tmo=(\d+)/) || [])[1]) || 10000;
+const withTimeout = (p, ms) => new Promise((res, rej) => { const t = setTimeout(() => rej(Object.assign(new Error('timeout'), { code: 'timeout' })), ms || TMO); p.then((v) => { clearTimeout(t); res(v); }, (e) => { clearTimeout(t); rej(e); }); });
+/* 只載入登入需要的部分（app + auth），不做匿名登入；老師登入不用等 Firestore */
+function fbBase() {
+  if (fbb) return fbb;
+  fbb = (async () => {
     const CDN = 'https://www.gstatic.com/firebasejs/' + FB.V + '/';
     const A = await import(CDN + 'firebase-app.js');
     const Au = await import(CDN + 'firebase-auth.js');
-    const F = await import(CDN + 'firebase-firestore.js');
     const app = A.initializeApp(FB.cfg, 'burbujas');
     const auth = Au.getAuth(app);
-    await auth.authStateReady();
-    if (!auth.currentUser) await Au.signInAnonymously(auth);
-    return { F, Au, auth, db: F.getFirestore(app) };
+    await auth.authStateReady();           // 先等瀏覽器還原上次的登入（老師的 Google 登入），不然會被匿名登入蓋掉
+    return { A, Au, app, auth };
+  })().catch((e) => { fbb = null; throw e; });
+  return fbb;
+}
+function fb() {
+  if (fbp) return fbp;
+  fbp = (async () => {
+    const b = await fbBase();
+    const F = await import('https://www.gstatic.com/firebasejs/' + FB.V + '/firebase-firestore.js');
+    if (!b.auth.currentUser) await b.Au.signInAnonymously(b.auth);
+    return { F, Au: b.Au, auth: b.auth, db: F.getFirestore(b.app) };
   })().catch((e) => { fbp = null; throw e; });
   return fbp;
 }
@@ -452,26 +463,28 @@ function sndEnd() { window.__sounds.end++; tone(660, 660, 0.15, 0.18); setTimeou
 /* ================= 老師登入（Google）與雲端清單 ================= */
 async function ownerCheck() {
   if (LOCAL) return localStorage.getItem('bb_local_login') === '1' && !/[?&]deny=1/.test(location.search);
+  ownerCheck.err = '';
   try {
-    const x = await fb(); await x.auth.authStateReady();
-    const u = x.auth.currentUser; if (!u || u.isAnonymous) return false;
-    await x.F.getDoc(x.F.doc(x.db, 'bubble_owner_data', 'lists'));      // 只有授權老師讀得到，不是老師會被規則擋掉
+    const b = await withTimeout(fbBase());
+    const u = b.auth.currentUser; if (!u || u.isAnonymous) return false;
+    const x = await withTimeout(fb());
+    await withTimeout(x.F.getDoc(x.F.doc(x.db, 'bubble_owner_data', 'lists')));      // 只有授權老師讀得到，不是老師會被規則擋掉
     return true;
   } catch (e) { ownerCheck.err = e.code || e.message || ''; return false; }
 }
 async function ownerLogin() {              // 成功回傳 null，失敗回傳訊息
   if (LOCAL) { if (/[?&]deny=1/.test(location.search)) return t('notOwner'); localStorage.setItem('bb_local_login', '1'); return null; }
-  let x;
-  try { x = await fb(); } catch (e) { return t('connFail') + '（' + (e.code || e.message || e) + '）'; }
-  try { await x.auth.authStateReady(); if (!x.auth.currentUser || x.auth.currentUser.isAnonymous) await x.Au.signInWithPopup(x.auth, new x.Au.GoogleAuthProvider()); }
+  let b;
+  try { b = await withTimeout(fbBase()); } catch (e) { return t('connFail') + '（' + (e.code || e.message || e) + '）'; }
+  try { if (!b.auth.currentUser || b.auth.currentUser.isAnonymous) await b.Au.signInWithPopup(b.auth, new b.Au.GoogleAuthProvider()); }
   catch (e) { return t('loginFail') + '（' + (e.code || e.message || e) + '）'; }
-  if (!(await ownerCheck())) { try { await x.Au.signOut(x.auth); } catch (e) {} return t('notOwner') + '（' + (ownerCheck.err || '') + '）'; }
+  if (!(await ownerCheck())) { try { await b.Au.signOut(b.auth); } catch (e) {} return t('notOwner') + '（' + (ownerCheck.err || '') + '）'; }
   return null;
 }
 async function ownerLogout() {
   cloudOK = false;
   if (LOCAL) localStorage.removeItem('bb_local_login');
-  else { try { const x = await fb(); await x.Au.signOut(x.auth); } catch (e) {} }
+  else { try { const x = await fbBase(); await x.Au.signOut(x.auth); } catch (e) {} }
 }
 let cloudOK = false;
 async function cloudLoad() {
@@ -719,7 +732,7 @@ function renderHome() {
 }
 function renderPw() {
   app.innerHTML = '<div class="wrap"><div class="top"><span class="brand">' + t('title') + '</span>' + langBtn() + '<button class="chip" data-a="home">' + t('back') + '</button></div>' +
-    '<div class="home" style="margin-top:6vh"><p>' + t('loginAsk') + '</p><button class="btn primary" data-a="login" id="loginBtn">' + t('loginBtn') + '</button><div class="err" id="pwErr"></div></div></div>';
+    '<div class="home" style="margin-top:6vh"><p>' + t('loginAsk') + '</p><button class="btn primary" data-a="login" id="loginBtn">' + t('loginBtn') + '</button><div class="err" id="pwErr">' + (ownerCheck.err === 'permission-denied' ? esc(t('notOwner')) : ownerCheck.err ? esc(t('connFail')) + '（' + esc(ownerCheck.err) + '）' : '') + '</div></div></div>';
 }
 function tabBtns(key, list, sel) { return '<span class="seg">' + list.map(([v, label]) => '<button class="chip" data-a="' + key + '" data-v="' + v + '" data-on="' + key + ':' + v + '">' + label + '</button>').join('') + '</span>'; }
 function renderTeacher() {
@@ -1096,6 +1109,7 @@ window.addEventListener('resize', () => { if (role === 'teacher') renderPanelDyn
 window.__bb = {
   reviewBlob, buildReviewCanvas, teamScores, get D() { return D; }, get S() { return S; }, get room() { return room; }, parseWords, effT };
 loadOpenCC();
+if (!LOCAL) fbBase().catch(() => {});      // 先載入登入需要的東西，按登入時彈出視窗才不會被擋
 requestAnimationFrame(frame);
 { const m = location.search.match(/[?&]room=(\d{4})/); if (m) joinRoom(m[1]); else renderRoot(); }
 </script>
