@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<title>泡泡字詞 · Burbujas de palabras</title>
+<meta property="og:title" content="泡泡字詞 · Burbujas de palabras">
+<meta property="og:description" content="上課小工具：字詞變成泡泡在畫面裡飄，唸對就戳破。Herramienta de clase para practicar palabras.">
+<meta property="og:image" content="og.jpg">
+<meta property="og:type" content="website">
+<style>
+html{color-scheme:light}
+:root{
+  --bg:#e8e1d3; --panel:#f6f1e6; --ink:#1f1d1a; --mute:#6a6457; --line:#2a2722;
+  --soft:#d9d0bd; --ok:#3d5a3a; --warn:#8a3b24;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Noto Sans SC","PingFang SC",system-ui,sans-serif;
+  -webkit-text-size-adjust:100%}
+body{min-height:100vh;min-height:100dvh}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+.wrap{max-width:1100px;margin:0 auto;padding:12px 12px calc(32px + env(safe-area-inset-bottom))}
+.hide{display:none!important}
+.top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.brand{font-weight:700;font-size:18px;letter-spacing:.06em;margin-right:auto}
+.chip,.btn{border:1.5px solid var(--line);background:var(--panel);border-radius:6px;padding:7px 12px;font-size:14px;line-height:1.2}
+.btn:active,.chip:active{transform:translateY(1px)}
+.btn.primary{background:var(--ink);color:var(--panel)}
+.btn.small{padding:5px 9px;font-size:13px}
+.btn.danger{color:var(--warn);border-color:var(--warn)}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.chip.on{background:var(--ink);color:var(--panel)}
+.pill{display:inline-block;border:1.5px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px;background:var(--panel)}
+.pill.live{background:var(--ok);color:#fff;border-color:var(--ok)}
+.code{font-size:20px;font-weight:700;letter-spacing:.2em}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.note{color:var(--mute);font-size:13px}
+/* 首頁 */
+.home{max-width:520px;margin:8vh auto 0;text-align:center}
+.home h1{font-size:34px;letter-spacing:.1em;margin:0 0 4px}
+.home p{color:var(--mute);margin:0 0 26px}
+.home .btn{display:block;width:100%;padding:16px;font-size:18px;margin-bottom:12px}
+.join{display:flex;gap:8px;margin-top:6px}
+.home .join .btn{display:block;width:auto;flex:none;margin:0;padding:10px 26px}
+.join input,.pwin{flex:1 1 auto;width:100%;font-size:24px;letter-spacing:.25em;text-align:center;border:1.5px solid var(--line);border-radius:6px;background:#fffdf7;padding:10px;min-width:0}
+.err{color:var(--warn);min-height:22px;margin-top:8px;font-size:14px}
+/* 控制列 */
+.ctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.ctl .sl{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mute)}
+.ctl input[type=range]{width:110px}
+.sec{border:1.5px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px;margin-bottom:10px}
+.sec h2{font-size:15px;margin:0 0 8px;letter-spacing:.05em}
+.sec .g{margin-bottom:10px}
+textarea{width:100%;min-height:96px;border:1.5px solid var(--line);border-radius:6px;background:#fffdf7;padding:8px;font-size:15px;resize:vertical}
+input[type=text],input[type=number],select{border:1.5px solid var(--line);border-radius:6px;background:#fffdf7;padding:6px 8px;font-size:14px;min-width:0}
+.seg{display:inline-flex}
+.seg .chip{border-radius:0;margin-left:-1.5px;padding:6px 11px}
+.seg .chip:first-child{border-radius:6px 0 0 6px;margin-left:0}
+.seg .chip:last-child{border-radius:0 6px 6px 0}
+.pytab{width:100%;border-collapse:collapse;font-size:14px}
+.pytab td{padding:3px 4px;border-bottom:1px solid var(--soft);vertical-align:middle}
+.pytab input{width:100%}
+/* 計時器 */
+.tmr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.tmtxt{font-size:30px;font-weight:700;letter-spacing:.08em;min-width:100px;font-variant-numeric:tabular-nums}
+.tmtxt.up{color:var(--warn);animation:blink .8s steps(2) infinite}
+@keyframes blink{50%{opacity:.35}}
+/* 泡泡場 */
+#target{min-height:0}
+.target{display:flex;align-items:baseline;gap:10px;justify-content:center;border:1.5px solid var(--line);border-radius:8px;background:var(--panel);padding:6px 12px;margin-bottom:8px}
+.target .big{font-size:30px;font-weight:700}
+.target small{font-size:15px;color:var(--mute)}
+#field{position:relative;overflow:hidden;border:1.5px solid var(--line);border-radius:10px;background:var(--panel);height:clamp(300px,58vh,640px);touch-action:manipulation;margin-bottom:10px}
+.student #field{height:clamp(320px,66dvh,720px)}
+.msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mute);font-size:18px;text-align:center;padding:20px;pointer-events:none}
+.bub{position:absolute;left:0;top:0;border-radius:50%;cursor:pointer;user-select:none;-webkit-user-select:none;will-change:transform}
+.bub .bi{position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.15;padding:6%;overflow:hidden}
+.bub.b0 .bi{background:#fffdf7}.bub.b1 .bi{background:#e4ead4}.bub.b2 .bi{background:#f1dccb}.bub.b3 .bi{background:#dde5ea}
+.bub .ba{color:var(--mute);white-space:nowrap;margin-bottom:2px}
+.bub .bh{font-weight:600;word-break:keep-all}
+.bub .bt{font-weight:600}
+.bub.enter .bi{animation:enter .35s ease-out}
+.bub.shake .bi{animation:shake .35s}
+.bub.pop{pointer-events:none}
+.bub.pop .bi{animation:pop .36s ease-out forwards}
+.bub.pop::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--line);animation:ring .36s ease-out forwards}
+@keyframes enter{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+@keyframes pop{to{transform:scale(1.35);opacity:0}}
+@keyframes ring{from{transform:scale(1);opacity:.8}to{transform:scale(1.7);opacity:0}}
+/* 清單 */
+.lists{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:620px){.lists{grid-template-columns:1fr}}
+.lst{border:1.5px solid var(--line);border-radius:8px;background:var(--panel);padding:8px 10px;min-height:64px}
+.lst h3{margin:0 0 6px;font-size:14px;letter-spacing:.05em}
+.lst.ok h3{color:var(--ok)}.lst.rv h3{color:var(--warn)}
+.wc{display:inline-block;border:1px solid var(--soft);background:#fffdf7;border-radius:6px;padding:3px 8px;margin:0 6px 6px 0;font-size:15px}
+.wc small{display:block;font-size:11px;color:var(--mute);line-height:1.1}
+/* 結算 */
+.ov{position:fixed;inset:0;background:rgba(31,29,26,.45);display:flex;align-items:center;justify-content:center;padding:14px;z-index:20}
+.ovc{background:var(--panel);border:1.5px solid var(--line);border-radius:12px;max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:16px}
+.ovc h2{margin:0 0 8px;font-size:20px}
+.ovc .nums{display:flex;gap:18px;font-size:16px;margin-bottom:10px}
+.ovc .nums b{font-size:26px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:8px;font-size:14px;z-index:30;max-width:90vw;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast hide"></div>
+<script>
+'use strict';
+/* ================= 基本工具 ================= */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const LOCAL = /[?&]local=1/.test(location.search);
+const LS_KEY = 'bb_state_v1';
+const PW_HASH = 8339599222134338;           // 老師密碼的雜湊值（只是介面上的門，不是真正的保密）
+const cyrb53 = (str, seed = 0) => {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) { ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+};
+const DEF = { script: 'tc', ann: 'py', speed: 3, size: 5, cap: 0, mode: 'say', timerSel: 'off', timerCustom: 90, autoTimer: true, mute: false, lists: [], cur: '', text: '', ok: false };
+function loadS() { try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) { return Object.assign({}, DEF); } }
+let S = loadS();
+function saveS() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) {} }
+let toastT = null;
+function toast(msg, ms = 2600) { const el = $('#toast'); el.textContent = msg; el.classList.remove('hide'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.add('hide'), ms); }
+
+/* ================= 文字（繁／簡，簡體也用台灣用字） ================= */
+const T = {
+  title: ['泡泡字詞', '泡泡字词'], sub: ['Burbujas de palabras', 'Burbujas de palabras'],
+  iTeacher: ['我是老師', '我是老师'], iStudent: ['我是學生', '我是学生'],
+  pwAsk: ['輸入老師密碼', '输入老师密码'], enter: ['進入', '进入'], remember: ['記住這台裝置', '记住这台装置'], pwBad: ['密碼不對', '密码不对'],
+  roomNo: ['輸入 4 位數房號', '输入 4 位数房号'], join: ['加入', '加入'],
+  badRoom: ['找不到這個房間，請問老師房號', '找不到这个房间，请问老师房号'], expired: ['房間已結束', '房间已结束'], connFail: ['連線失敗，請再試一次', '连线失败，请再试一次'], connecting: ['連線中…', '连线中…'],
+  standalone: ['單機模式', '单机模式'], openRoom: ['開啟連線', '开启连线'], endRoom: ['結束連線', '结束连线'], roomLabel: ['房號', '房号'],
+  copyLink: ['複製學生連結', '复制学生连结'], copied: ['已複製', '已复制'], live: ['連線中', '连线中'], creating: ['建立中…', '建立中…'],
+  back: ['返回', '返回'], leave: ['離開', '离开'], settings: ['設定', '设定'],
+  m_say: ['模式1 學生唸', '模式1 学生念'], m_hear: ['模式2 老師唸', '模式2 老师念'], m_match: ['配對', '配对'],
+  start: ['開始本輪', '开始本轮'], endRound: ['結束本輪', '结束本轮'], undo: ['復原', '复原'], freeze: ['暫停移動', '暂停移动'], unfreeze: ['繼續移動', '继续移动'],
+  speed: ['速度', '速度'], size: ['大小', '大小'], cap: ['同時出現', '同时出现'], capAll: ['全部', '全部'],
+  quickPh: ['加字詞，按 Enter', '加字词，按 Enter'], words: ['字詞', '字词'],
+  wordsPh: ['你好 謝謝 老師\npor favor, hola, gracias\n你好=hola', '你好 谢谢 老师\npor favor, hola, gracias\n你好=hola'],
+  apply: ['套用字詞', '套用字词'],
+  help: ['中文用空白分開；西文、英文用逗號或換行分開；配對用等號，例如 你好=hola。', '中文用空白分开；西文、英文用逗号或换行分开；配对用等号，例如 你好=hola。'],
+  lists: ['課堂清單', '课堂清单'], newList: ['（新清單）', '（新清单）'], saveList: ['儲存清單', '储存清单'], delList: ['刪除清單', '删除清单'], listName: ['清單名稱', '清单名称'],
+  saved: ['已儲存', '已储存'], deleted: ['已刪除', '已删除'], delConfirm: ['刪除這份清單？', '删除这份清单？'],
+  ann: ['標示', '标示'], py: ['拼音', '拼音'], zy: ['注音', '注音'], none: ['不標示', '不标示'], script: ['字形', '字形'], tc: ['繁體', '繁体'], sc: ['簡體', '简体'],
+  timer: ['計時器', '计时器'], tOff: ['不計時', '不计时'], t30: ['30 秒', '30 秒'], t60: ['1 分鐘', '1 分钟'], t180: ['3 分鐘', '3 分钟'], t300: ['5 分鐘', '5 分钟'], tCustom: ['自訂', '自订'], tUp: ['碼表', '码表'],
+  secs: ['秒', '秒'], tStart: ['開始', '开始'], tPause: ['暫停', '暂停'], tResume: ['繼續', '继续'], tReset: ['歸零', '归零'],
+  tAuto: ['開始本輪時自動計時', '开始本轮时自动计时'], timeUp: ['時間到', '时间到'],
+  okList: ['正確清單', '正确清单'], rvList: ['複習清單', '复习清单'], left: ['還剩', '还剩'], rvLater: ['本輪結束後會出現在這裡', '本轮结束后会出现在这里'],
+  roundDone: ['本輪結束', '本轮结束'], correct: ['正確', '正确'], toReview: ['要複習', '要复习'], practiceRv: ['只練複習清單', '只练复习清单'], again: ['全部重來', '全部重来'], close: ['關閉', '关闭'],
+  waitT: ['等老師開始', '等老师开始'], pressStart: ['按「開始本輪」', '按「开始本轮」'], findThis: ['找出', '找出'],
+  needWords: ['請先輸入字詞', '请先输入字词'], needPair: ['配對模式要用等號輸入，例如 你好=hola', '配对模式要用等号输入，例如 你好=hola'],
+  sound: ['音效', '音效'], tapSound: ['點一下畫面開啟聲音', '点一下画面开启声音'], pyFix: ['拼音微調', '拼音微调'], del: ['刪除', '删除'],
+  applied: ['已套用', '已套用'], added: ['已加入', '已加入'], modeStudent1: ['請唸出泡泡裡的字詞', '请念出泡泡里的字词'],
+};
+let uiSC = () => S.script === 'sc';
+const t = (k) => { const v = T[k]; return v ? v[uiSC() ? 1 : 0] : k; };
+
+/* ================= 轉繁簡、拼音 ================= */
+let conv = { toTW: (x) => x, toCN: (x) => x };
+let convP = null;
+function loadOpenCC() {
+  if (convP) return convP;
+  convP = new Promise((res) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js';
+    sc.onload = () => { try { conv.toTW = OpenCC.Converter({ from: 'cn', to: 'tw' }); conv.toCN = OpenCC.Converter({ from: 'tw', to: 'cn' }); } catch (e) {} res(); };
+    sc.onerror = () => res();
+    document.head.appendChild(sc);
+    setTimeout(res, 4000);
+  });
+  return convP;
+}
+const both = (s) => ({ tc: conv.toTW(s), sc: conv.toCN(s) });
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('load ' + src)); document.head.appendChild(s); }); }
+let pyP = null;
+function loadPinyinEngine() {
+  if (typeof Engine !== 'undefined') return Promise.resolve();
+  if (pyP) return pyP;
+  pyP = (async () => { for (const f of ['gt-rules.js', 'lib-pinyin-pro.js', 'lib-t2cn.js', 'engine.js']) await loadScript('pinyin/' + f); })().catch((e) => { pyP = null; throw e; });
+  return pyP;
+}
+/* 讀音用「台灣讀音＋GoodTeacher 規則」那一套（跟 造句小劇場 同一份引擎） */
+function pinyinLines(text, script) {
+  const { lines } = Engine.analyze(text, '', {});
+  const out = Engine.textOutput(lines, 'below', script).split('\n');
+  const res = [];
+  for (let i = 0; i < out.length; i++) { if (/\p{Script=Han}/u.test(out[i]) && i + 1 < out.length) { res.push(out[i + 1]); i++; } }
+  return res.join(' ');
+}
+function pyToZy(py) { return String(py || '').trim().split(/\s+/).filter(Boolean).map((s) => { const z = Engine.toZhuyin(s); return z ? z.text : s; }).join(' '); }
+
+/* ================= 連線層（跟 造句小劇場 一樣：Firebase memorma-24dab） ================= */
+const FB = { cfg: { apiKey: 'AIzaSyC_YSDn2OH6_GKKwCq0d8QFNl3fYXzTC60', authDomain: 'memorma-24dab.firebaseapp.com', projectId: 'memorma-24dab', appId: '1:806709458465:web:f0d12acb2f911f2f165560' }, V: '12.17.1' };
+const COL = 'bubble_rooms';
+let fbp = null;
+function fb() {
+  if (fbp) return fbp;
+  fbp = (async () => {
+    const CDN = 'https://www.gstatic.com/firebasejs/' + FB.V + '/';
+    const A = await import(CDN + 'firebase-app.js');
+    const Au = await import(CDN + 'firebase-auth.js');
+    const F = await import(CDN + 'firebase-firestore.js');
+    const app = A.initializeApp(FB.cfg, 'burbujas');
+    const auth = Au.getAuth(app);
+    await auth.authStateReady();
+    if (!auth.currentUser) await Au.signInAnonymously(auth);
+    return { F, Au, auth, db: F.getFirestore(app) };
+  })().catch((e) => { fbp = null; throw e; });
+  return fbp;
+}
+async function authed() { const x = await fb(); if (!x.auth.currentUser) await x.Au.signInAnonymously(x.auth); return x; }
+const rnd4 = () => String(Math.floor(1000 + Math.random() * 9000));
+function setPath(obj, path, val) { const p = path.split('.'); let o = obj; for (let i = 0; i < p.length - 1; i++) { if (typeof o[p[i]] !== 'object' || o[p[i]] === null) o[p[i]] = {}; o = o[p[i]]; } o[p[p.length - 1]] = val; }
+function getPath(obj, path) { return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj); }
+
+const FireSync = {
+  async create(doc) {
+    const { F, db, auth } = await authed();
+    for (let i = 0; i < 12; i++) {
+      const code = rnd4();
+      try {
+        await F.setDoc(F.doc(db, COL, code), Object.assign({ code, hostUid: auth.currentUser.uid, createdAt: F.serverTimestamp(), expireAt: F.Timestamp.fromMillis(Date.now() + 6 * 3600e3) }, doc));
+        return code;
+      } catch (e) { if (e && e.code !== 'permission-denied') throw e; }
+    }
+    throw new Error('no-code');
+  },
+  async publish(code, part) { const { F, db } = await authed(); await F.updateDoc(F.doc(db, COL, code), part); },
+  async add(code, field, value) { const { F, db } = await authed(); await F.updateDoc(F.doc(db, COL, code), { [field]: F.arrayUnion(value) }); },
+  async remove(code, field, value) { const { F, db } = await authed(); await F.updateDoc(F.doc(db, COL, code), { [field]: F.arrayRemove(value) }); },
+  async close(code) { const { F, db } = await authed(); await F.deleteDoc(F.doc(db, COL, code)); },
+  async subscribe(code, cb, errcb) {
+    const { F, db } = await authed();
+    return F.onSnapshot(F.doc(db, COL, code), (snap) => {
+      const d = snap.exists() ? snap.data() : null;
+      if (d && d.expireAt && d.expireAt.toMillis && d.expireAt.toMillis() < Date.now()) return cb(null, false);
+      cb(d, snap.metadata.hasPendingWrites);
+    }, (e) => errcb && errcb(e));
+  },
+};
+/* 測試用：同一個瀏覽器的不同分頁當作老師和學生（網址加 ?local=1） */
+const LocalSync = {
+  _k: (c) => 'bb_room_' + c,
+  _r(c) { const v = localStorage.getItem(this._k(c)); return v ? JSON.parse(v) : null; },
+  _w(c, o) { localStorage.setItem(this._k(c), JSON.stringify(o)); },
+  async create(doc) { const code = rnd4(); this._w(code, Object.assign({ code }, JSON.parse(JSON.stringify(doc)))); return code; },
+  async publish(code, part) { const o = this._r(code); if (!o) return; for (const k in part) setPath(o, k, JSON.parse(JSON.stringify(part[k]))); this._w(code, o); },
+  async add(code, field, value) { const o = this._r(code); if (!o) return; const a = getPath(o, field) || []; if (!a.includes(value)) a.push(value); setPath(o, field, a); this._w(code, o); },
+  async remove(code, field, value) { const o = this._r(code); if (!o) return; setPath(o, field, (getPath(o, field) || []).filter((x) => x !== value)); this._w(code, o); },
+  async close(code) { localStorage.removeItem(this._k(code)); },
+  async subscribe(code, cb) {
+    const k = this._k(code);
+    const read = () => { const v = localStorage.getItem(k); cb(v ? JSON.parse(v) : null, false); };
+    const h = (e) => { if (e.key === k) read(); };
+    window.addEventListener('storage', h); read();
+    return () => window.removeEventListener('storage', h);
+  },
+};
+const Sync = LOCAL ? LocalSync : FireSync;
+
+/* ================= 狀態 ================= */
+let role = null;                 // null 首頁 | 'pw' | 'teacher' | 'student'
+let D = null;                    // 目前的房間資料（老師是正本，學生是從雲端抄來的）
+let room = null;                 // 老師：{code}
+let roomBusy = false;
+let sUnsub = null, sCode = null, sErr = '';
+let skew = 0;                    // 學生裝置和老師裝置的時鐘差
+const now = () => Date.now() - skew;
+let nextAdv = 0;                 // 配對：下一題的時間
+const localPop = new Set();      // 學生自己點的（等雲端確認前先破掉）
+const undone = new Set();        // 老師復原過的
+let dismissedN = -1;
+let panelOpen = false;
+
+const idleRd = (n) => ({ n: n || 0, st: 'idle', order: [], popped: [], miss: [], target: null, rv: [] });
+function newDoc() {
+  return {
+    v: 1, ts: 0, nid: 0,
+    set: { script: S.script, ann: S.ann, mode: S.mode, cap: S.cap, size: S.size },
+    words: [],
+    mt: { base: 0, at: Date.now(), sp: S.speed, run: true },
+    rd: idleRd(0),
+    tm: { k: null, total: 0, base: 0, at: Date.now(), run: false },
+  };
+}
+const SC = () => (role === 'student' ? !!(D && D.set && D.set.script === 'sc') : S.script === 'sc');
+uiSC = () => (role === 'student' ? !!(D && D.set && D.set.script === 'sc') : S.script === 'sc');
+
+/* ================= 泡泡運動（兩邊用同一組數字各自算，所以只要同步「設定」） ================= */
+const fac = (sp) => 0.25 + (sp - 1) * 0.3;
+function effT() { const m = D.mt; return m.run ? m.base + (now() - m.at) / 1000 * fac(m.sp) : m.base; }
+function posAt(p0, v, u) {
+  const p = p0 + v * u;
+  if (v > 0 && p < 0) return p;       // 還在畫面外，正在彈入
+  if (v < 0 && p > 1) return p;
+  const m = ((p % 2) + 2) % 2;
+  return m > 1 ? 2 - m : m;           // 碰到邊就反彈
+}
+const r3 = (x) => Math.round(x * 1000) / 1000;
+function mkMotion(born) {
+  const side = Math.floor(Math.random() * 4);
+  const sp = () => (0.6 + Math.random() * 0.7) * 0.09;
+  const rnd = () => 0.1 + Math.random() * 0.8;
+  const sg = () => (Math.random() < 0.5 ? -1 : 1);
+  let x0, y0, vx, vy;
+  if (side === 0) { y0 = -0.15; x0 = rnd(); vy = sp(); vx = sg() * sp() * 0.8; }
+  else if (side === 1) { y0 = 1.15; x0 = rnd(); vy = -sp(); vx = sg() * sp() * 0.8; }
+  else if (side === 2) { x0 = -0.15; y0 = rnd(); vx = sp(); vy = sg() * sp() * 0.8; }
+  else { x0 = 1.15; y0 = rnd(); vx = -sp(); vy = sg() * sp() * 0.8; }
+  return { x0: r3(x0), y0: r3(y0), vx: r3(vx), vy: r3(vy), born: r3(born), c: Math.floor(Math.random() * 4) };
+}
+
+/* ================= 輸入字詞 ================= */
+const HAN_RE = /[㐀-鿿]/;
+function parseWords(text) {
+  const out = [];
+  for (let line of String(text || '').replace(/\r/g, '').split('\n')) {
+    line = line.trim().replace(/＝/g, '=');
+    if (!line) continue;
+    let pieces;
+    if (/[,，、;；]/.test(line)) pieces = line.split(/[,，、;；]/);
+    else if (HAN_RE.test(line)) pieces = ((line.match(/=/g) || []).length >= 2) ? line.split(/\s+(?=\S*=)/) : line.split(/\s+/);
+    else pieces = [line];
+    for (let p of pieces) {
+      p = p.trim(); if (!p) continue;
+      const parts = p.split('=').map((x) => x.trim());
+      const main = parts[0]; if (!main) continue;
+      const tr = parts.slice(1).filter(Boolean);
+      out.push({ main, k: HAN_RE.test(main) ? 'zh' : 'lat', tr: tr.length ? tr : null });
+    }
+  }
+  return out;
+}
+function mkWord(it, born) {
+  const b = it.k === 'zh' ? both(it.main) : { tc: it.main, sc: it.main };
+  return { id: 'w' + (++D.nid), k: it.k, tc: b.tc, sc: b.sc, py: '', zy: '', tr: it.tr, m: mkMotion(born) };
+}
+async function annotate(words) {
+  const zh = words.filter((w) => w.k === 'zh' && !w.py);
+  if (!zh.length) return;
+  try {
+    await loadPinyinEngine();
+    zh.forEach((w) => { try { w.py = pinyinLines(w.tc, 'pinyin').slice(0, 80); w.zy = pinyinLines(w.tc, 'zhuyin').slice(0, 80); } catch (e) {} });
+  } catch (e) { toast('拼音引擎載入失敗'); }
+  push(['words']); renderPanelDyn(); renderLists();
+}
+
+/* ================= 推送（老師 → 雲端） ================= */
+let pushT = null; const pushKeys = new Set();
+function push(keys) {
+  if (!room) return;
+  keys.forEach((k) => pushKeys.add(k));
+  clearTimeout(pushT); pushT = setTimeout(flush, 120);
+}
+async function flush() {
+  if (!room) return;
+  const keys = Array.from(pushKeys); pushKeys.clear();
+  const part = { ts: Date.now() };
+  keys.forEach((k) => { part[k] = k.includes('.') ? getPath(D, k) : D[k]; });
+  try { await Sync.publish(room.code, part); } catch (e) { toast(t('connFail')); }
+}
+const pk = (n, id) => n + ':' + id;
+function idsOf(arr, n) { const pre = n + ':'; return (arr || []).filter((s) => s.startsWith(pre)).map((s) => s.slice(pre.length)); }
+const poppedIds = () => idsOf(D.rd.popped, D.rd.n);
+const missIds = () => idsOf(D.rd.miss, D.rd.n);
+const wmap = () => new Map(D.words.map((w) => [w.id, w]));
+function remainingIds() { const ps = new Set(poppedIds()); return D.rd.order.filter((id) => !ps.has(id)); }
+function visibleIds() {
+  if (D.rd.st === 'idle') return [];
+  const r = remainingIds(); const cap = D.set.cap || 0;
+  return cap ? r.slice(0, cap) : r;
+}
+
+/* ================= 聲音（用程式合成，不用音檔） ================= */
+window.__sounds = { pop: 0, wrong: 0, end: 0 };
+let AC = null;
+function ac() { if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (AC && AC.state === 'suspended') AC.resume().catch(() => {}); return AC; }
+function tone(freq0, freq1, dur, vol, type) {
+  if (S.mute) return; const c = ac(); if (!c) return; const t0 = c.currentTime;
+  const o = c.createOscillator(), g = c.createGain(); o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq0, t0); o.frequency.exponentialRampToValueAtTime(freq1, t0 + dur);
+  g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur + 0.02);
+  o.connect(g); g.connect(c.destination); o.start(t0); o.stop(t0 + dur + 0.03);
+}
+function sndPop() {
+  window.__sounds.pop++;
+  tone(900 + Math.random() * 250, 200, 0.12, 0.25, 'sine');
+  if (S.mute) return; const c = ac(); if (!c) return; const len = Math.floor(c.sampleRate * 0.05), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const n = c.createBufferSource(), g = c.createGain(); n.buffer = buf; g.gain.value = 0.18; n.connect(g); g.connect(c.destination); n.start();
+}
+function sndWrong() { window.__sounds.wrong++; tone(220, 150, 0.18, 0.2, 'triangle'); }
+function sndEnd() { window.__sounds.end++; tone(660, 660, 0.15, 0.18); setTimeout(() => tone(880, 880, 0.25, 0.18), 160); }
+
+/* ================= 老師動作 ================= */
+function rdPublishFull() { push(['rd']); }
+async function applyText() {
+  const txt = ($('#wordsIn') || {}).value || '';
+  S.text = txt; saveS();
+  const items = parseWords(txt);
+  if (!items.length) { toast(t('needWords')); return; }
+  await loadOpenCC();
+  D.words = items.map((it) => mkWord(it, 0));
+  D.rd = idleRd(D.rd.n + 1); localPop.clear(); undone.clear();
+  push(['words', 'rd']); renderAll(); annotate(D.words);
+  toast(t('applied'));
+}
+async function quickAdd(text) {
+  const items = parseWords(text);
+  if (!items.length) return;
+  await loadOpenCC();
+  const born = effT();
+  const ws = items.map((it) => mkWord(it, born));
+  D.words = D.words.concat(ws);
+  if (D.rd.st === 'run') {
+    const ok = ws.filter((w) => D.set.mode !== 'match' || (w.tr && w.tr.length));
+    if (D.set.mode === 'match' && !ok.length) toast(t('needPair'));
+    D.rd.order = D.rd.order.concat(ok.map((w) => w.id));
+    push(['words', 'rd']);
+  } else push(['words']);
+  renderAll(); annotate(ws);
+}
+function startRound(ids) {
+  const mode = D.set.mode;
+  let pool = ids && ids.length ? D.words.filter((w) => ids.includes(w.id)) : D.words.slice();
+  if (mode === 'match') pool = pool.filter((w) => w.tr && w.tr.length);
+  if (!pool.length) { toast(D.words.length ? (mode === 'match' ? t('needPair') : t('needWords')) : t('needWords')); return; }
+  const t0 = effT();
+  pool.forEach((w) => { w.m = mkMotion(t0); });
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  D.rd = { n: D.rd.n + 1, st: 'run', order: pool.map((w) => w.id), popped: [], miss: [], target: null, rv: [] };
+  D.mt = { base: t0, at: now(), sp: D.mt.sp, run: true };
+  localPop.clear(); undone.clear(); dismissedN = -1;
+  if (S.autoTimer && D.tm.k) tmStart(true);
+  if (mode === 'match') pickTarget(true);
+  push(['words', 'rd', 'mt', 'tm']); renderAll();
+}
+function pickTarget(quiet) {
+  const rem = remainingIds();
+  if (!rem.length) { D.rd.target = null; return; }
+  let cand = rem.filter((id) => id !== D.rd.target); if (!cand.length) cand = rem;
+  D.rd.target = cand[Math.floor(Math.random() * cand.length)];
+  if (!quiet) { push(['rd.target']); renderTarget(); }
+}
+function endRound(why) {
+  if (D.rd.st !== 'run') return;
+  const rem = remainingIds(), ms = missIds();
+  const inOrder = new Set(D.rd.order);
+  const rvSet = new Set(rem.concat(ms.filter((id) => inOrder.has(id))));
+  D.rd.rv = D.words.filter((w) => rvSet.has(w.id)).map((w) => w.id);
+  D.rd.st = 'end'; D.rd.why = why || 'manual';
+  D.mt = { base: effT(), at: now(), sp: D.mt.sp, run: false };
+  if (D.tm.run) { D.tm = { k: D.tm.k, total: D.tm.total, base: tmElapsed(), at: now(), run: false }; }
+  sndEnd(); dismissedN = -1;
+  push(['rd', 'mt', 'tm']); renderAll();
+}
+function popTeacher(id, el) {
+  const rd = D.rd; if (rd.st !== 'run' || poppedIds().includes(id)) return;
+  if (D.set.mode === 'match') {
+    if (!rd.target) return;
+    if (id !== rd.target) { wrongFx(el, rd.target); return; }
+    nextAdv = now() + 650;
+  }
+  const s = pk(rd.n, id); rd.popped.push(s); undone.delete(s);
+  if (room) Sync.add(room.code, 'rd.popped', s).catch(() => toast(t('connFail')));
+  renderLists(); updateCtl();
+}
+function wrongFx(el, targetId) {
+  if (el) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); setTimeout(() => el.classList.remove('shake'), 400); }
+  sndWrong();
+  if (!targetId) return;
+  const s = pk(D.rd.n, targetId);
+  if (role === 'teacher') { if (!D.rd.miss.includes(s)) { D.rd.miss.push(s); if (room) Sync.add(room.code, 'rd.miss', s).catch(() => {}); } }
+  else if (sCode) Sync.add(sCode, 'rd.miss', s).catch(() => {});
+}
+function undoPop() {
+  const ids = poppedIds(); if (!ids.length) return;
+  const last = pk(D.rd.n, ids[ids.length - 1]);
+  D.rd.popped = D.rd.popped.filter((x) => x !== last); undone.add(last);
+  if (D.rd.st === 'end') { D.rd.st = 'run'; D.rd.rv = []; D.mt = { base: D.mt.base, at: now(), sp: D.mt.sp, run: true }; dismissedN = -1; push(['rd', 'mt']); }
+  else if (room) Sync.remove(room.code, 'rd.popped', last).catch(() => {});
+  if (D.set.mode === 'match' && D.rd.target === ids[ids.length - 1]) { /* 目標回來了 */ }
+  renderAll();
+}
+function setMode(m) {
+  D.set.mode = m; S.mode = m; saveS();
+  if (D.rd.st !== 'idle') D.rd = idleRd(D.rd.n + 1);
+  localPop.clear(); undone.clear();
+  push(['set', 'rd']); renderAll();
+}
+/* 計時器 */
+function tmElapsed() { const x = D.tm; return x.base + (x.run ? (now() - x.at) / 1000 : 0); }
+function tmShow() { const x = D.tm; if (!x.k) return null; const e = tmElapsed(); return x.k === 'd' ? Math.max(0, x.total - e) : e; }
+function tmConfig() {
+  const s = S.timerSel; let k = null, total = 0;
+  if (s === 'u') k = 'u'; else if (s === 'custom') { k = 'd'; total = Math.max(1, +S.timerCustom || 60); } else if (/^d\d+$/.test(s)) { k = 'd'; total = +s.slice(1); }
+  D.tm = { k, total, base: 0, at: now(), run: false };
+  push(['tm']); renderTimer();
+}
+function tmStart(quiet) { if (!D.tm.k) return; D.tm = { k: D.tm.k, total: D.tm.total, base: 0, at: now(), run: true }; if (!quiet) { push(['tm']); renderTimer(); } }
+function tmPause() {
+  if (!D.tm.k) return;
+  if (D.tm.run) D.tm = { k: D.tm.k, total: D.tm.total, base: tmElapsed(), at: now(), run: false };
+  else if (!(D.tm.k === 'd' && tmShow() <= 0)) D.tm = { k: D.tm.k, total: D.tm.total, base: D.tm.base, at: now(), run: true };
+  push(['tm']); renderTimer();
+}
+function tmReset() { if (!D.tm.k) return; D.tm = { k: D.tm.k, total: D.tm.total, base: 0, at: now(), run: false }; push(['tm']); renderTimer(); }
+const fmt = (sec) => { sec = Math.max(0, Math.floor(sec + 0.0001)); return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0'); };
+
+/* 房間 */
+async function openRoom() {
+  if (roomBusy || room) return;
+  roomBusy = true; renderBar();
+  try {
+    const doc = JSON.parse(JSON.stringify(D)); doc.ts = Date.now();
+    const code = await Sync.create(doc); room = { code };
+    room.unsub = await Sync.subscribe(code, mergeRemote, () => {});
+  } catch (e) { toast(t('connFail')); console.error(e); }
+  roomBusy = false; renderBar();
+}
+async function endRoom() { if (!room) return; const c = room.code; try { room.unsub && room.unsub(); } catch (e) {} room = null; try { await Sync.close(c); } catch (e) {} renderBar(); }
+function mergeRemote(d) {
+  if (!d || !d.rd || d.rd.n !== D.rd.n) return;
+  let ch = false;
+  (d.rd.popped || []).forEach((s) => { if (!D.rd.popped.includes(s) && !undone.has(s)) { D.rd.popped.push(s); ch = true; if (D.set.mode === 'match') nextAdv = now() + 650; } });
+  (d.rd.miss || []).forEach((s) => { if (!D.rd.miss.includes(s)) { D.rd.miss.push(s); ch = true; } });
+  if (ch) { renderLists(); updateCtl(); }
+}
+
+/* ================= 學生 ================= */
+async function joinRoom(code) {
+  sErr = ''; D = null; sCode = code; localPop.clear(); dismissedN = -1;
+  if (sUnsub) { try { sUnsub(); } catch (e) {} sUnsub = null; }
+  role = 'student'; skew = 0; renderRoot();
+  try {
+    sUnsub = await Sync.subscribe(code, (d, pending) => {
+      if (!d) { sErr = D ? t('expired') : t('badRoom'); D = null; renderRoot(); return; }
+      if (!pending && d.ts) { const sk = Date.now() - d.ts; if (!window.__skewSet || sk < skew) { skew = sk; window.__skewSet = true; } }
+      const old = D; D = d; sErr = '';
+      if (!old || !old.rd || old.rd.n !== d.rd.n) { localPop.clear(); dismissedN = -1; }
+      if (!old) renderRoot(); else renderStudentParts();
+    }, () => { sErr = t('connFail'); renderRoot(); });
+  } catch (e) { sErr = t('connFail'); renderRoot(); }
+}
+function leaveStudent() { if (sUnsub) { try { sUnsub(); } catch (e) {} sUnsub = null; } D = null; sCode = null; sErr = ''; role = null; window.__skewSet = false; skew = 0; renderRoot(); }
+function popStudent(id, el) {
+  if (!D || D.rd.st !== 'run') return;
+  const mode = D.set.mode; if (mode === 'say') return;
+  if (poppedIds().includes(id) || localPop.has(id)) return;
+  if (mode === 'match') {
+    if (!D.rd.target) return;
+    if (id !== D.rd.target) { wrongFx(el, D.rd.target); return; }
+  }
+  localPop.add(id);
+  Sync.add(sCode, 'rd.popped', pk(D.rd.n, id)).catch(() => toast(t('connFail')));
+  renderLists();
+}
+
+/* ================= 畫面：骨架 ================= */
+const app = $('#app');
+function renderRoot() {
+  if (role === null) return renderHome();
+  if (role === 'pw') return renderPw();
+  if (role === 'teacher') return renderTeacher();
+  if (role === 'student') return renderStudent();
+}
+function langBtn() { return '<button class="chip" data-a="lang">' + (S.script === 'sc' ? '繁' : '简') + '</button>'; }
+function renderHome() {
+  document.title = '泡泡字詞 · Burbujas de palabras';
+  app.innerHTML = '<div class="wrap"><div class="top"><span class="brand"></span>' + langBtn() + '</div><div class="home"><h1>' + t('title') + '</h1><p>' + T.sub[0] + '</p>' +
+    '<button class="btn primary" data-a="teacher">' + t('iTeacher') + '</button>' +
+    '<div class="join"><input id="joinIn" inputmode="numeric" maxlength="4" placeholder="' + esc(t('roomNo')) + '" autocomplete="off"><button class="btn primary" data-a="join">' + t('join') + '</button></div>' +
+    '<div class="err" id="joinErr">' + esc(sErr) + '</div></div></div>';
+}
+function renderPw() {
+  app.innerHTML = '<div class="wrap"><div class="top"><span class="brand">' + t('title') + '</span>' + langBtn() + '<button class="chip" data-a="home">' + t('back') + '</button></div>' +
+    '<div class="home" style="margin-top:6vh"><p>' + t('pwAsk') + '</p><div class="join"><input class="pwin" id="pwIn" type="password" autocomplete="off" style="letter-spacing:.1em"><button class="btn primary" data-a="login">' + t('enter') + '</button></div>' +
+    '<label class="note" style="display:block;margin-top:10px"><input type="checkbox" id="pwRem" checked> ' + t('remember') + '</label><div class="err" id="pwErr"></div></div></div>';
+  setTimeout(() => { const i = $('#pwIn'); i && i.focus(); }, 30);
+}
+function tabBtns(key, list, sel) { return '<span class="seg">' + list.map(([v, label]) => '<button class="chip" data-a="' + key + '" data-v="' + v + '" data-on="' + key + ':' + v + '">' + label + '</button>').join('') + '</span>'; }
+function renderTeacher() {
+  if (!D) D = newDoc();
+  document.title = '泡泡字詞 · 老師';
+  app.innerHTML = '<div class="wrap teacher">' +
+    '<div class="top" id="bar"></div>' +
+    '<div class="ctl" id="ctl">' +
+      '<span class="seg" id="modeSeg"></span>' +
+      '<button class="btn primary" data-a="start" id="bStart"></button><button class="btn" data-a="endround" id="bEnd"></button><button class="btn" data-a="undo" id="bUndo"></button><button class="btn" data-a="freeze" id="bFreeze"></button>' +
+      '<label class="sl"><span id="lSpeed"></span><input type="range" min="1" max="10" step="1" id="speed"><b id="vSpeed"></b></label>' +
+      '<label class="sl"><span id="lSize"></span><input type="range" min="1" max="10" step="1" id="size"><b id="vSize"></b></label>' +
+      '<input type="text" id="quickIn" style="flex:1;min-width:140px">' +
+    '</div>' +
+    '<div class="sec hide" id="panel"></div>' +
+    '<div class="tmr" id="tmr"></div>' +
+    '<div id="target"></div>' +
+    '<div id="field"></div>' +
+    '<div class="lists" id="lists"></div>' +
+    '<div id="overlay"></div></div>';
+  buildPanel(); renderAll(); fieldReset();
+  if (S.text && !D.words.length) { /* 上次輸入的字詞留在輸入框，按「套用字詞」才會用 */ }
+}
+function renderStudent() {
+  document.title = '泡泡字詞';
+  if (!D) {
+    app.innerHTML = '<div class="wrap student"><div class="top"><span class="brand">' + t('title') + '</span><button class="chip" data-a="leave">' + t('leave') + '</button></div><div class="home" style="margin-top:12vh"><p>' + esc(sErr || t('connecting')) + '</p></div></div>';
+    return;
+  }
+  app.innerHTML = '<div class="wrap student"><div class="top"><span class="brand">' + t('title') + '</span><span class="pill live">' + t('roomLabel') + ' ' + esc(sCode) + '</span>' +
+    '<button class="chip" data-a="mute" id="bMute"></button><button class="chip" data-a="leave">' + t('leave') + '</button></div>' +
+    '<div class="tmr" id="tmr"></div><div id="target"></div><div id="field"></div><div class="lists" id="lists"></div><div id="overlay"></div></div>';
+  fieldReset(); renderStudentParts();
+}
+function renderStudentParts() { if (role !== 'student' || !D) return; const m = $('#bMute'); if (m) m.textContent = t('sound') + (S.mute ? ' ✕' : ' ✓'); renderTimer(); renderTarget(); renderLists(); renderOverlay(); }
+function renderAll() { if (role === 'teacher') { renderBar(); updateCtl(); renderPanelDyn(); } renderTimer(); renderTarget(); renderLists(); renderOverlay(); }
+function renderBar() {
+  const el = $('#bar'); if (!el || role !== 'teacher') return;
+  let r;
+  if (room) {
+    const url = location.origin + location.pathname + '?room=' + room.code + (LOCAL ? '&local=1' : '');
+    r = '<span class="pill live">' + t('live') + '</span><span class="note">' + t('roomLabel') + '</span><span class="code">' + room.code + '</span>' +
+      '<button class="btn small" data-a="copylink" data-url="' + esc(url) + '">' + t('copyLink') + '</button><button class="btn small danger" data-a="endroom">' + t('endRoom') + '</button>';
+  } else r = '<span class="pill">' + t('standalone') + '</span>' + (roomBusy ? '<span class="note">' + t('creating') + '</span>' : '') + '<button class="btn small primary" data-a="openroom"' + (roomBusy ? ' disabled' : '') + '>' + t('openRoom') + '</button>';
+  el.innerHTML = '<span class="brand">' + t('title') + '</span>' + r + '<button class="chip' + (panelOpen ? ' on' : '') + '" data-a="panel">' + t('settings') + '</button>' +
+    '<span class="seg">' + [['tc', t('tc')], ['sc', t('sc')]].map(([v, l]) => '<button class="chip' + (S.script === v ? ' on' : '') + '" data-a="script" data-v="' + v + '">' + l + '</button>').join('') + '</span>' +
+    '<button class="chip" data-a="home">' + t('back') + '</button>';
+}
+function updateCtl() {
+  if (role !== 'teacher') return;
+  const rd = D.rd;
+  $('#modeSeg').innerHTML = [['say', 'm_say'], ['hear', 'm_hear'], ['match', 'm_match']].map(([v, k]) => '<button class="chip' + (D.set.mode === v ? ' on' : '') + '" data-a="mode" data-v="' + v + '">' + t(k) + '</button>').join('');
+  $('#bStart').textContent = t('start'); $('#bEnd').textContent = t('endRound'); $('#bEnd').disabled = rd.st !== 'run';
+  $('#bUndo').textContent = t('undo'); $('#bUndo').disabled = !poppedIds().length;
+  $('#bFreeze').textContent = D.mt.run ? t('freeze') : t('unfreeze');
+  $('#lSpeed').textContent = t('speed'); $('#lSize').textContent = t('size');
+  const sp = $('#speed'), sz = $('#size');
+  if (document.activeElement !== sp) sp.value = D.mt.sp; if (document.activeElement !== sz) sz.value = D.set.size;
+  $('#vSpeed').textContent = D.mt.sp; $('#vSize').textContent = D.set.size;
+  $('#quickIn').placeholder = t('quickPh');
+  $$('[data-on]').forEach((el) => { const [k, v] = el.dataset.on.split(':'); const cur = { ann: D.set.ann, script: D.set.script, tsel: S.timerSel }[k]; el.classList.toggle('on', String(cur) === v); });
+}
+
+/* ================= 設定面板 ================= */
+function buildPanel() {
+  const el = $('#panel');
+  el.innerHTML =
+    '<div class="g"><h2>' + t('lists') + '</h2><div class="row"><select id="listSel"></select><input type="text" id="listName" placeholder="' + esc(t('listName')) + '" style="flex:1;min-width:120px"><button class="btn small" data-a="listsave">' + t('saveList') + '</button><button class="btn small danger" data-a="listdel">' + t('delList') + '</button></div></div>' +
+    '<div class="g"><h2>' + t('words') + '</h2><textarea id="wordsIn" placeholder="' + esc(t('wordsPh')) + '"></textarea><div class="row" style="margin-top:6px"><button class="btn primary" data-a="apply">' + t('apply') + '</button><span class="note">' + t('help') + '</span></div></div>' +
+    '<div class="g row"><span><b>' + t('ann') + '</b> ' + tabBtns('ann', [['py', t('py')], ['zy', t('zy')], ['none', t('none')]]) + '</span>' +
+      '<span><b>' + t('script') + '</b> ' + tabBtns('script', [['tc', t('tc')], ['sc', t('sc')]]) + '</span>' +
+      '<label><b>' + t('cap') + '</b> <select id="capSel"></select></label>' +
+      '<label><input type="checkbox" id="muteChk"> ' + t('sound') + '</label></div>' +
+    '<div class="g"><h2>' + t('timer') + '</h2><div class="row">' + tabBtns('tsel', [['off', t('tOff')], ['d30', t('t30')], ['d60', t('t60')], ['d180', t('t180')], ['d300', t('t300')], ['custom', t('tCustom')], ['u', t('tUp')]]) +
+      '<span id="custWrap"><input type="number" id="custSec" min="1" max="7200" style="width:80px"> ' + t('secs') + '</span>' +
+      '<label><input type="checkbox" id="autoT"> ' + t('tAuto') + '</label></div></div>' +
+    '<div class="g"><h2>' + t('pyFix') + '</h2><div id="pyTab"></div></div>';
+  $('#wordsIn').value = S.text || '';
+  $('#capSel').innerHTML = [0, 3, 5, 8, 10, 15, 20].map((n) => '<option value="' + n + '">' + (n ? n : t('capAll')) + '</option>').join('');
+  $('#capSel').value = D.set.cap; $('#muteChk').checked = !S.mute; $('#autoT').checked = !!S.autoTimer; $('#custSec').value = S.timerCustom;
+  fillListSel();
+}
+function fillListSel() {
+  const sel = $('#listSel'); if (!sel) return;
+  sel.innerHTML = '<option value="">' + esc(t('newList')) + '</option>' + S.lists.map((l) => '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>').join('');
+  sel.value = S.cur || '';
+  const l = S.lists.find((x) => x.id === S.cur); $('#listName').value = l ? l.name : '';
+}
+function renderPanelDyn() {
+  if (role !== 'teacher') return;
+  $('#panel').classList.toggle('hide', !panelOpen);
+  const cw = $('#custWrap'); if (cw) cw.style.display = S.timerSel === 'custom' ? '' : 'none';
+  const tab = $('#pyTab'); if (!tab) return;
+  if (!D.words.length) { tab.innerHTML = '<span class="note">—</span>'; return; }
+  if (tab.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;   // 正在改的時候不要重畫
+  tab.innerHTML = '<table class="pytab">' + D.words.map((w) => '<tr><td style="width:28%">' + esc(SC() ? w.sc : w.tc) + (w.tr ? ' <span class="note">=' + esc(w.tr.join(' / ')) + '</span>' : '') + '</td><td>' +
+    (w.k === 'zh' ? '<input type="text" data-pyid="' + w.id + '" value="' + esc(w.py || '') + '" aria-label="' + t('py') + '">' : '') + '</td><td style="width:90px;color:var(--mute)">' + esc(w.k === 'zh' ? (w.zy || '') : '') + '</td><td style="width:54px"><button class="btn small" data-a="delword" data-id="' + w.id + '">' + t('del') + '</button></td></tr>').join('') + '</table>';
+}
+
+/* ================= 計時器、目標、清單、結算 ================= */
+function renderTimer() {
+  const el = $('#tmr'); if (!el || !D) return;
+  const showT = D.tm.k;
+  let h = '';
+  if (showT) h += '<span class="tmtxt" id="tmTxt">' + fmt(tmShow()) + '</span>';
+  if (role === 'teacher' && showT) h += '<button class="btn small primary" data-a="tstart">' + t('tStart') + '</button><button class="btn small" data-a="tpause">' + (D.tm.run ? t('tPause') : t('tResume')) + '</button><button class="btn small" data-a="treset">' + t('tReset') + '</button>';
+  el.innerHTML = h; el.style.display = h ? '' : 'none';
+}
+function renderTarget() {
+  const el = $('#target'); if (!el || !D) return;
+  if (D.set.mode !== 'match' || D.rd.st !== 'run' || !D.rd.target) { el.innerHTML = ''; return; }
+  const w = wmap().get(D.rd.target); if (!w) { el.innerHTML = ''; return; }
+  const a = w.k === 'zh' ? (D.set.ann === 'py' ? w.py : D.set.ann === 'zy' ? w.zy : '') : '';
+  el.innerHTML = '<div class="target"><span class="note">' + t('findThis') + '</span><span class="big">' + esc(SC() ? w.sc : w.tc) + '</span>' + (a ? '<small>' + esc(a) + '</small>' : '') + '</div>';
+}
+function chip(w) { if (!w) return ''; const a = w.k === 'zh' ? (D.set.ann === 'py' ? w.py : D.set.ann === 'zy' ? w.zy : '') : ''; return '<span class="wc">' + (a ? '<small>' + esc(a) + '</small>' : '') + esc(SC() ? w.sc : w.tc) + '</span>'; }
+function renderLists() {
+  const el = $('#lists'); if (!el || !D) return;
+  const W = wmap(); const rd = D.rd;
+  let ok = poppedIds(); if (role === 'student') localPop.forEach((id) => { if (!ok.includes(id)) ok.push(id); });
+  const rem = rd.st === 'run' ? remainingIds().length - (role === 'student' ? localPop.size : 0) : 0;
+  const rvIds = rd.st === 'end' ? rd.rv : [];
+  el.innerHTML = '<div class="lst ok"><h3>' + t('okList') + ' (' + ok.length + ')' + (rd.st === 'run' ? ' · ' + t('left') + ' ' + Math.max(0, rem) : '') + '</h3>' + ok.map((id) => chip(W.get(id))).join('') + '</div>' +
+    '<div class="lst rv"><h3>' + t('rvList') + (rd.st === 'end' ? ' (' + rvIds.length + ')' : '') + '</h3>' + (rd.st === 'end' ? rvIds.map((id) => chip(W.get(id))).join('') : '<span class="note">' + t('rvLater') + '</span>') + '</div>';
+}
+function renderOverlay() {
+  const el = $('#overlay'); if (!el || !D) return;
+  const rd = D.rd;
+  if (rd.st !== 'end' || dismissedN === rd.n) { el.innerHTML = ''; return; }
+  const W = wmap(); const okN = poppedIds().length, rv = rd.rv || [];
+  el.innerHTML = '<div class="ov"><div class="ovc"><h2>' + (rd.why === 'time' ? t('timeUp') + ' · ' : '') + t('roundDone') + '</h2><div class="nums"><span>' + t('correct') + ' <b>' + okN + '</b></span><span>' + t('toReview') + ' <b>' + rv.length + '</b></span></div>' +
+    '<div class="lst rv" style="margin-bottom:10px"><h3>' + t('rvList') + '</h3>' + rv.map((id) => chip(W.get(id))).join('') + '</div>' +
+    '<div class="row">' + (role === 'teacher' ? '<button class="btn primary" data-a="review"' + (rv.length ? '' : ' disabled') + '>' + t('practiceRv') + '</button><button class="btn" data-a="again">' + t('again') + '</button>' : '') + '<button class="btn" data-a="closeov">' + t('close') + '</button></div></div></div>';
+}
+
+/* ================= 泡泡畫面（每一格都由時間算出位置） ================= */
+const els = new Map();
+let FW = 0, FH = 0, ro = null;
+function fieldReset() {
+  els.clear(); FW = FH = 0;
+  const f = $('#field'); if (!f) return;
+  if (ro) ro.disconnect();
+  ro = new ResizeObserver(() => { const r = f.getBoundingClientRect(); FW = r.width; FH = r.height; els.forEach((el) => { el._sig = ''; }); });
+  ro.observe(f);
+  const r = f.getBoundingClientRect(); FW = r.width; FH = r.height;
+}
+function bubbleDiam() { return Math.round(Math.min(FW, FH) * (0.10 + D.set.size * 0.03)); }
+function annOf(w) { return w.k === 'zh' ? (D.set.ann === 'py' ? w.py : D.set.ann === 'zy' ? w.zy : '') : ''; }
+function fitLat(len, Dp) { return Math.max(11, Math.min(Dp * 0.22, Dp * 1.5 / Math.max(len, 1))).toFixed(1); }
+function bubbleInner(w, Dp) {
+  if (D.set.mode === 'match') { const tr = w.tr || []; const L = Math.max(1, ...tr.map((x) => x.length)); return '<div class="bt" style="font-size:' + fitLat(L, Dp) + 'px">' + tr.map((x) => '<div>' + esc(x) + '</div>').join('') + '</div>'; }
+  if (w.k === 'lat') return '<div class="bt" style="font-size:' + fitLat(w.tc.length, Dp) + 'px">' + esc(w.tc) + '</div>';
+  const txt = SC() ? w.sc : w.tc, chars = Array.from(txt), n = chars.length, lines = n > 6 ? 2 : 1, per = Math.ceil(n / lines);
+  const fs = Math.max(12, Math.min(Dp * 0.34, Dp * 0.78 / per));
+  const a = annOf(w); let ah = '';
+  if (a) { const afs = Math.max(9, Math.min(fs * 0.45, (Dp * 0.9) / (a.length * 0.6))); ah = '<div class="ba" style="font-size:' + afs.toFixed(1) + 'px">' + esc(a) + '</div>'; }
+  const body = lines === 2 ? esc(chars.slice(0, per).join('')) + '<br>' + esc(chars.slice(per).join('')) : esc(txt);
+  return ah + '<div class="bh" style="font-size:' + fs.toFixed(1) + 'px">' + body + '</div>';
+}
+function frame() {
+  requestAnimationFrame(frame);
+  if (!D || (role !== 'teacher' && role !== 'student')) return;
+  const f = $('#field'); if (!f) return;
+  /* 計時文字 */
+  const tt = $('#tmTxt');
+  if (tt && D.tm.k) { const v = tmShow(); tt.textContent = fmt(v); tt.classList.toggle('up', D.tm.k === 'd' && v <= 0); }
+  if (role === 'teacher') teacherLogic();
+  if (!FW || !FH) { const r = f.getBoundingClientRect(); FW = r.width; FH = r.height; }
+  const W = wmap(), vis = visibleIds(), vset = new Set(vis);
+  const pset = new Set(poppedIds()); if (role === 'student') localPop.forEach((id) => pset.add(id));
+  /* 已經不在畫面的泡泡：被戳破就播破掉的效果 */
+  els.forEach((el, id) => {
+    if (vset.has(id) && !pset.has(id)) return;
+    els.delete(id);
+    if (pset.has(id)) { el.classList.add('pop'); sndPop(); setTimeout(() => el.remove(), 400); } else el.remove();
+  });
+  const idle = D.rd.st === 'idle';
+  let msg = f.querySelector('.msg');
+  if (idle || !D.words.length) { if (!msg) { msg = document.createElement('div'); msg.className = 'msg'; f.appendChild(msg); } msg.textContent = role === 'teacher' ? t('pressStart') : t('waitT'); }
+  else if (msg) msg.remove();
+  if (!vis.length) return;
+  const T0 = effT(), Dp = bubbleDiam();
+  for (const id of vis) {
+    if (pset.has(id)) continue;
+    const w = W.get(id); if (!w || !w.m) continue;
+    let el = els.get(id);
+    if (!el) { el = document.createElement('div'); el.className = 'bub b' + (w.m.c % 4) + ' enter'; el.dataset.id = id; el.innerHTML = '<div class="bi"></div>'; f.appendChild(el); els.set(id, el); setTimeout(() => el.classList.remove('enter'), 400); }
+    const sig = [D.set.mode, D.set.script, D.set.ann, Dp, w.tc, w.py, w.zy, (w.tr || []).join('|')].join('~');
+    if (el._sig !== sig) { el._sig = sig; el.style.width = el.style.height = Dp + 'px'; el.firstChild.innerHTML = bubbleInner(w, Dp); }
+    const u = Math.max(0, T0 - w.m.born);
+    const px = posAt(w.m.x0, w.m.vx, u), py = posAt(w.m.y0, w.m.vy, u);
+    el.style.transform = 'translate3d(' + (px * (FW - Dp)).toFixed(1) + 'px,' + (py * (FH - Dp)).toFixed(1) + 'px,0)';
+  }
+}
+function teacherLogic() {
+  const rd = D.rd;
+  /* 倒數到 0 就結束本輪 */
+  if (D.tm.k === 'd' && D.tm.run && tmElapsed() >= D.tm.total) {
+    D.tm = { k: 'd', total: D.tm.total, base: D.tm.total, at: now(), run: false }; push(['tm']); renderTimer();
+    if (rd.st === 'run') endRound('time');
+  }
+  if (rd.st !== 'run') return;
+  /* 全部破掉了就結束本輪 */
+  if (!remainingIds().length) { endRound('done'); return; }
+  /* 配對：換下一題 */
+  if (D.set.mode === 'match') {
+    const tgtPopped = rd.target && poppedIds().includes(rd.target);
+    if ((tgtPopped || !rd.target) && now() >= nextAdv) { pickTarget(false); }
+  }
+}
+
+/* ================= 事件 ================= */
+document.addEventListener('pointerdown', (e) => {
+  ac();
+  const b = e.target.closest('.bub'); if (!b || b.classList.contains('pop')) return;
+  if (role === 'teacher') popTeacher(b.dataset.id, b); else if (role === 'student') popStudent(b.dataset.id, b);
+});
+document.addEventListener('click', async (e) => {
+  const el = e.target.closest('[data-a]'); if (!el) return;
+  const a = el.dataset.a, v = el.dataset.v;
+  switch (a) {
+    case 'lang': S.script = S.script === 'sc' ? 'tc' : 'sc'; saveS(); renderRoot(); break;
+    case 'teacher': if (S.ok) { role = 'teacher'; renderRoot(); } else { role = 'pw'; renderRoot(); } break;
+    case 'login': {
+      const pw = ($('#pwIn') || {}).value || '';
+      if (cyrb53(pw) === PW_HASH) { if ($('#pwRem') && $('#pwRem').checked) { S.ok = true; saveS(); } role = 'teacher'; renderRoot(); } else { $('#pwErr').textContent = t('pwBad'); }
+      break;
+    }
+    case 'join': { const c = (($('#joinIn') || {}).value || '').trim(); if (!/^\d{4}$/.test(c)) { $('#joinErr').textContent = t('badRoom'); break; } joinRoom(c); break; }
+    case 'home': if (role === 'teacher') { if (room && !confirm(t('endRoom') + '？')) break; await endRoom(); } role = null; sErr = ''; renderRoot(); break;
+    case 'leave': leaveStudent(); break;
+    case 'openroom': openRoom(); break;
+    case 'endroom': endRoom(); break;
+    case 'copylink': { const url = el.dataset.url; try { await navigator.clipboard.writeText(url); } catch (err) { const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e2) {} ta.remove(); } toast(t('copied')); break; }
+    case 'panel': panelOpen = !panelOpen; renderBar(); renderPanelDyn(); break;
+    case 'script': S.script = v; D.set.script = v; saveS(); push(['set']); renderAll(); break;
+    case 'ann': S.ann = v; D.set.ann = v; saveS(); push(['set']); renderAll(); break;
+    case 'mode': setMode(v); break;
+    case 'start': startRound(); break;
+    case 'endround': endRound('manual'); break;
+    case 'undo': undoPop(); break;
+    case 'freeze': D.mt = { base: effT(), at: now(), sp: D.mt.sp, run: !D.mt.run }; push(['mt']); updateCtl(); break;
+    case 'apply': applyText(); break;
+    case 'delword': { D.words = D.words.filter((w) => w.id !== el.dataset.id); D.rd.order = D.rd.order.filter((id) => id !== el.dataset.id); push(['words', 'rd']); renderAll(); break; }
+    case 'listsave': {
+      const name = (($('#listName') || {}).value || '').trim() || (T.newList[0].replace(/[（）]/g, ''));
+      const txt = ($('#wordsIn') || {}).value || ''; S.text = txt;
+      let l = S.lists.find((x) => x.id === S.cur);
+      if (l) { l.name = name; l.text = txt; } else { l = { id: 'l' + Date.now(), name, text: txt }; S.lists.push(l); S.cur = l.id; }
+      saveS(); fillListSel(); toast(t('saved')); break;
+    }
+    case 'listdel': { const l = S.lists.find((x) => x.id === S.cur); if (!l) break; if (!confirm(t('delConfirm'))) break; S.lists = S.lists.filter((x) => x.id !== l.id); S.cur = ''; saveS(); fillListSel(); $('#wordsIn').value = ''; S.text = ''; saveS(); toast(t('deleted')); break; }
+    case 'tsel': S.timerSel = v; saveS(); tmConfig(); renderPanelDyn(); updateCtl(); break;
+    case 'tstart': tmStart(); break;
+    case 'tpause': tmPause(); break;
+    case 'treset': tmReset(); break;
+    case 'review': { const ids = (D.rd.rv || []).slice(); startRound(ids); break; }
+    case 'again': startRound(); break;
+    case 'closeov': dismissedN = D.rd.n; renderOverlay(); break;
+    case 'mute': S.mute = !S.mute; saveS(); renderStudentParts(); break;
+  }
+});
+document.addEventListener('input', (e) => {
+  const id = e.target.id;
+  if (id === 'speed') { D.mt = { base: effT(), at: now(), sp: +e.target.value, run: D.mt.run }; S.speed = +e.target.value; saveS(); push(['mt']); $('#vSpeed').textContent = e.target.value; }
+  else if (id === 'size') { D.set.size = +e.target.value; S.size = +e.target.value; saveS(); push(['set']); $('#vSize').textContent = e.target.value; els.forEach((el) => { el._sig = ''; }); }
+});
+document.addEventListener('change', (e) => {
+  const id = e.target.id;
+  if (id === 'capSel') { D.set.cap = +e.target.value; S.cap = +e.target.value; saveS(); push(['set']); renderLists(); }
+  else if (id === 'listSel') { S.cur = e.target.value; const l = S.lists.find((x) => x.id === S.cur); S.text = l ? l.text : ''; saveS(); $('#wordsIn').value = S.text; $('#listName').value = l ? l.name : ''; }
+  else if (id === 'muteChk') { S.mute = !e.target.checked; saveS(); }
+  else if (id === 'autoT') { S.autoTimer = e.target.checked; saveS(); }
+  else if (id === 'custSec') { S.timerCustom = Math.max(1, +e.target.value || 60); saveS(); if (S.timerSel === 'custom') tmConfig(); }
+  else if (e.target.dataset && e.target.dataset.pyid) {
+    const w = D.words.find((x) => x.id === e.target.dataset.pyid); if (!w) return;
+    w.py = e.target.value.trim(); try { w.zy = pyToZy(w.py); } catch (err) { w.zy = ''; }
+    push(['words']); setTimeout(renderPanelDyn, 0); renderLists();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  if (e.target.id === 'pwIn') { $('[data-a="login"]').click(); }
+  else if (e.target.id === 'joinIn') { $('[data-a="join"]').click(); }
+  else if (e.target.id === 'quickIn') { const v = e.target.value; e.target.value = ''; quickAdd(v); }
+});
+
+window.__bb = { get D() { return D; }, get S() { return S; }, get room() { return room; }, parseWords, effT };
+loadOpenCC();
+requestAnimationFrame(frame);
+{ const m = location.search.match(/[?&]room=(\d{4})/); if (m) joinRoom(m[1]); else renderRoot(); }
+</script>
+</body>
+</html>
