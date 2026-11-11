@@ -308,7 +308,7 @@ with sync_playwright() as pw:
     s.evaluate("document.querySelector('.bub').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))"); s.wait_for_timeout(300)
     check('模式1 學生不能戳', s.evaluate('window.__bb.D.rd.popped.length') == 0)
     # 老師戳 → 學生同步
-    pop_by_id(t2, ids(t2)[0]); s.wait_for_timeout(500)
+    pop_by_id(t2, ids(t2)[0]); s.wait_for_timeout(900)
     check('老師戳破學生同步', s.evaluate('window.__bb.D.rd.popped.length') == 1 and s.locator('.bub').count() == 3)
     # 同步速度、繁簡
     t2.evaluate("(()=>{const e=document.querySelector('#speed');e.value=9;e.dispatchEvent(new Event('input',{bubbles:true}))})()"); s.wait_for_timeout(400)
