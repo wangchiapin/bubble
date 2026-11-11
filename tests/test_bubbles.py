@@ -147,6 +147,16 @@ with sync_playwright() as pw:
     check('碼表暫停', t.inner_text('#tmTxt') == a)
     t.click('[data-a=treset]'); check('碼表歸零', t.inner_text('#tmTxt') == '00:00')
     t.click('[data-a=tsel][data-v=off]'); t.click('[data-a=panel]')
+    # 記住設定：重新整理後設定還在
+    t.evaluate("(()=>{})()")
+    t.reload(); teacher_login(t)
+    sv = t.evaluate("({tsel:window.__bb.S.timerSel, tk:window.__bb.D.tm.k, mode:window.__bb.D.set.mode, speed:window.__bb.D.mt.sp})")
+    check('重新整理後記得計時方式並生效', sv['tsel'] == 'off' and sv['tk'] is None, sv)
+    t.evaluate("window.__bb.S.timerSel='d60'"); t.evaluate("localStorage.setItem('bb_state_v1', JSON.stringify(window.__bb.S))")
+    t.reload(); teacher_login(t)
+    check('重新整理後倒數 60 秒仍然生效', t.evaluate('window.__bb.D.tm.k') == 'd' and t.evaluate('window.__bb.D.tm.total') == 60)
+    t.evaluate("window.__bb.S.timerSel='off'"); t.evaluate("localStorage.setItem('bb_state_v1', JSON.stringify(window.__bb.S))")
+    t.reload(); teacher_login(t); apply_words(t, '你好 謝謝 老師')
     # 存清單
     if t.is_hidden('#panel'): t.click('[data-a=panel]')
     t.fill('#wordsIn', '一 二 三'); t.fill('#listName', '數字'); t.click('[data-a=listsave]')

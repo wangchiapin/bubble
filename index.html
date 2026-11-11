@@ -316,8 +316,13 @@ function newDoc() {
     words: [],
     mt: { base: 0, at: Date.now(), sp: S.speed, run: true },
     rd: idleRd(0),
-    tm: { k: null, total: 0, base: 0, at: Date.now(), run: false },
+    tm: tmFromS(),
   };
+}
+function tmFromS() {                 // 記住上次選的計時方式
+  const sel = S.timerSel; let k = null, total = 0;
+  if (sel === 'u') k = 'u'; else if (sel === 'custom') { k = 'd'; total = Math.max(1, +S.timerCustom || 60); } else if (/^d\d+$/.test(sel)) { k = 'd'; total = +sel.slice(1); }
+  return { k, total, base: 0, at: Date.now(), run: false };
 }
 const SC = () => (role === 'student' ? !!(D && D.set && D.set.script === 'sc') : S.script === 'sc');
 uiSC = () => (role === 'student' ? !!(D && D.set && D.set.script === 'sc') : S.script === 'sc');
@@ -649,9 +654,7 @@ function setMode(m) {
 function tmElapsed() { const x = D.tm; return x.base + (x.run ? (now() - x.at) / 1000 : 0); }
 function tmShow() { const x = D.tm; if (!x.k) return null; const e = tmElapsed(); return x.k === 'd' ? Math.max(0, x.total - e) : e; }
 function tmConfig() {
-  const s = S.timerSel; let k = null, total = 0;
-  if (s === 'u') k = 'u'; else if (s === 'custom') { k = 'd'; total = Math.max(1, +S.timerCustom || 60); } else if (/^d\d+$/.test(s)) { k = 'd'; total = +s.slice(1); }
-  D.tm = { k, total, base: 0, at: now(), run: false };
+  D.tm = tmFromS();
   push(['tm']); renderTimer();
 }
 function tmStart(quiet) { if (!D.tm.k) return; D.tm = { k: D.tm.k, total: D.tm.total, base: 0, at: now(), run: true }; if (!quiet) { push(['tm']); renderTimer(); } }
