@@ -215,6 +215,10 @@ const Engine = (function () {
     };
     gtPass(false);
     gtPass(true);
+    // 沒有規則、但 pinyin-pro 會讀錯的字：直接用 GoodTeacher 的預設讀音（只收人工確認過的字）
+    if (GT.vetted) for (let k = 0; k < chars.length; k++) {
+      if (!locked[k] && GT.vetted[chars[k]] && !GT_BY_CHAR.has(chars[k])) py[k] = GT.vetted[chars[k]];
+    }
 
     // 5) 使用者在畫面上點選過的讀音
     for (let k = 0; k < chars.length; k++) {
