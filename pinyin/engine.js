@@ -183,7 +183,7 @@ const Engine = (function () {
       return toneOf(d);
     };
     const tokOk = (tok, k) => {
-      if (k < 0 || k >= chars.length) return false;
+      if (k < 0 || k >= chars.length) return tok === '@GT_PUNCT';   // 整段文字的開頭／結尾，當作標點（句首的「間隔」、單獨一個「彈」）
       const c = chars[k];
       if (tok[0] === '@') {
         switch (tok) {
